@@ -153,11 +153,6 @@ const LOAN_INTEREST_RATE = 0.0008; // 초당 복리 이자율
 const MAX_DEBT = 6000;
 const LOAN_OPTIONS = [300, 1000, 3000];
 
-// 카지노 시스템 (슬롯머신)
-const SLOT_SYMBOLS = ['🍫', '🍬', '🤍', '🍓', '🫐', '💎'];
-const SLOT_WEIGHTS = [30, 25, 20, 12, 10, 3]; // 합계 100, 희귀할수록 배당 높음
-const SLOT_PAYOUTS = { '🍫': 2, '🍬': 2.5, '🤍': 3, '🍓': 5, '🫐': 6, '💎': 20 };
-const CASINO_BETS = [50, 200, 500];
 
 // 생산 라인 슬롯 확장
 const MAX_LINE_CAP = 10;
@@ -1241,53 +1236,7 @@ function FinanceTab({ g, takeLoan, repayLoan, playCasino }) {
         </div>
       </Panel>
 
-      <SectionTitle eyebrow="Lucky Belt" title="카지노" />
-      <Panel style={{ padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginBottom: 18 }}>
-          {(g.casinoLast?.reels || ['❔', '❔', '❔']).map((s, i) => (
-            <div key={i} style={{ width: 64, height: 64, borderRadius: 12, background: C.bgPanelLighter, border: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>
-              {s}
-            </div>
-          ))}
-        </div>
-        {g.casinoLast && (
-          <div style={{ textAlign: 'center', marginBottom: 16, fontSize: 13, fontWeight: 700, color: g.casinoLast.outcome === 'lose' ? C.berry : C.pistachio }}>
-            {g.casinoLast.outcome === 'jackpot' && `🎉 트리플 매치! +${fmt(g.casinoLast.payout)}냥`}
-            {g.casinoLast.outcome === 'partial' && `페어! 베팅 절반(${fmt(g.casinoLast.payout)}냥) 회수`}
-            {g.casinoLast.outcome === 'lose' && `꽝... -${fmt(g.casinoLast.bet)}냥`}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-          {CASINO_BETS.map((bet) => (
-            <Btn key={bet} variant="gold" disabled={g.money < bet} onClick={() => playCasino(bet)}>
-              {fmt(bet)}냥 베팅
-            </Btn>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 18 }}>
-          <input
-            type="number"
-            min="1"
-            placeholder="직접 베팅액 입력"
-            value={customBet}
-            onChange={(e) => setCustomBet(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && confirmBet()}
-            style={{ width: 160, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 12.5 }}
-          />
-          <Btn variant="primary" disabled={!customBet || Number(customBet) <= 0 || Number(customBet) > g.money} onClick={confirmBet}>
-            직접 베팅
-          </Btn>
-        </div>
-        <div style={{ fontSize: 11, color: C.creamDim, lineHeight: 1.8 }}>
-          <div style={{ marginBottom: 4, fontWeight: 700, color: C.creamDim }}>배당표 (세 심볼 일치 시 베팅액의 N배)</div>
-          <div>
-            {SLOT_SYMBOLS.map((s) => (
-              <span key={s} style={{ marginRight: 12, display: 'inline-block', marginBottom: 4 }}>{s} × {SLOT_PAYOUTS[s]}</span>
-            ))}
-          </div>
-          <div style={{ marginTop: 6 }}>두 심볼만 일치하면 베팅액의 절반을 돌려받고, 아무것도 안 맞으면 베팅액 전액을 잃어요.</div>
-        </div>
-      </Panel>
+       </Panel>
     </div>
   );
 }
