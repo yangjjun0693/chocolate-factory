@@ -27,6 +27,17 @@ const C = {
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');`;
 
 /* ---------------------------------------------------------------- */
+/*  좌우 배너 광고                                                     */
+/*  - 아래 src에 이미지 URL을 넣으면 화면 양옆에 배너가 표시됩니다.        */
+/*  - href를 넣으면 배너 클릭 시 새 탭으로 이동합니다.                    */
+/*  - 권장 사이즈: 160 x 600 (와이드 스크린 세로 배너)                    */
+/* ---------------------------------------------------------------- */
+const AD_BANNERS = {
+  left: { src: '', href: '', alt: 'https://i.imgur.com/3HBQoMV.jpeg' },
+  right: { src: '', href: '', alt: 'https://i.imgur.com/xfa4mYF.png' },
+};
+
+/* ---------------------------------------------------------------- */
 /*  Supabase 연동 (이름 + 비밀번호 인증 & 세이브)                        */
 /*  - Supabase Auth(이메일 기반) 대신, players/game_saves 테이블 +      */
 /*    security definer RPC(signup/login/save_game)로 직접 구현했다.    */
@@ -321,6 +332,50 @@ function SectionTitle({ eyebrow, title, right }) {
 /* ---------------------------------------------------------------- */
 /*  메인 컴포넌트                                                     */
 /* ---------------------------------------------------------------- */
+/* ---------------------------------------------------------------- */
+/*  배너 광고 컴포넌트                                                  */
+/*  - src가 비어있으면 자리만 차지하는 빈 플레이스홀더를 보여준다.          */
+/*  - src가 있으면 실제 이미지를 렌더링하고, href가 있으면 클릭 가능.       */
+/* ---------------------------------------------------------------- */
+function AdBanner({ src, href, alt }) {
+  const inner = src ? (
+    <img
+      src={src}
+      alt={alt || '광고'}
+      style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 12 }}
+    />
+  ) : (
+    <div
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 6, height: 480, color: C.creamDim, fontSize: 11, textAlign: 'center', padding: 12, lineHeight: 1.6,
+      }}
+    >
+      <span style={{ fontSize: 22 }}>🖼️</span>
+      AD_BANNERS 에<br />이미지 URL을 넣어주세요<br />(160×600 권장)
+    </div>
+  );
+
+  const box = (
+    <div
+      style={{
+        width: 160, flexShrink: 0, background: C.bgPanel, border: `1px dashed ${C.line}`,
+        borderRadius: 12, overflow: 'hidden', position: 'sticky', top: 20,
+      }}
+    >
+      {inner}
+    </div>
+  );
+
+  if (!src) return box;
+
+  return (
+    <a href={href || '#'} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+      {box}
+    </a>
+  );
+}
+
 export default function ChocolateFactoryTycoon() {
   const [g, setG] = useState(initialGame());
   const [tab, setTab] = useState('factory');
@@ -643,7 +698,7 @@ export default function ChocolateFactoryTycoon() {
   ];
 
   return (
-    <div style={{ minHeight: 640, background: C.bgDeep, fontFamily: "'Space Grotesk', sans-serif", position: 'relative', paddingBottom: 24 }}>
+    <div style={{ minHeight: 640, background: C.bgDeep, display: 'flex', justifyContent: 'center', gap: 16, padding: '20px 16px' }}>
       <style>{`
         ${FONT_IMPORT}
         * { box-sizing: border-box; }
@@ -658,8 +713,13 @@ export default function ChocolateFactoryTycoon() {
         @keyframes jackpotPop { 0% { transform: translate(-50%,-40%) scale(0.4) rotate(-8deg); opacity: 0; } 55% { transform: translate(-50%,-52%) scale(1.2) rotate(4deg); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1) rotate(0deg); opacity: 1; } }
         @keyframes confettiBurst { 0% { transform: translate(0,0) rotate(0deg); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; } }
         select { font-family: 'Space Grotesk', sans-serif; }
+        .ftc-ad-col { display: block; }
+        @media (max-width: 1180px) { .ftc-ad-col { display: none; } }
       `}</style>
 
+      <div className="ftc-ad-col"><AdBanner {...AD_BANNERS.left} /></div>
+
+      <div style={{ width: '100%', maxWidth: 900, minHeight: 640, background: C.bgDeep, fontFamily: "'Space Grotesk', sans-serif", position: 'relative', paddingBottom: 24 }}>
       {/* 헤더 */}
       <div style={{ padding: '18px 22px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -768,6 +828,9 @@ export default function ChocolateFactoryTycoon() {
           {g.toast.msg}
         </div>
       )}
+      </div>
+
+      <div className="ftc-ad-col"><AdBanner {...AD_BANNERS.right} /></div>
     </div>
   );
 }
