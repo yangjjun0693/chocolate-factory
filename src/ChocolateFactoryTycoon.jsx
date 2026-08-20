@@ -27,6 +27,36 @@ const C = {
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');`;
 
 /* ---------------------------------------------------------------- */
+/*  Supabase 연동 (이름 + 비밀번호 인증 & 세이브)                        */
+/*  - Supabase Auth(이메일 기반) 대신, players/game_saves 테이블 +      */
+/*    security definer RPC(signup/login/save_game)로 직접 구현했다.    */
+/*  - 세션 토큰이 없으므로, 저장할 때마다 비밀번호를 함께 보내 서버에서   */
+/*    재검증한다 (이 게임 규모에서는 충분하지만, 프로덕션이라면 Supabase */
+/*    Auth의 JWT 세션을 쓰는 편이 더 안전하다).                          */
+/* ---------------------------------------------------------------- */
+const SUPABASE_URL = 'https://nfahizdxaytdtsuaaqpt.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_9EXf5jstSdFyxmP0sq181A_UjsRPJCw';
+
+async function supabaseRpc(fn, body) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+  let json = null;
+  try { json = await res.json(); } catch (e) { /* 본문 없음(void 함수) */ }
+  if (!res.ok) {
+    const msg = (json && (json.message || json.error_description || json.hint)) || '요청이 실패했어요';
+    throw new Error(msg);
+  }
+  return json;
+}
+
+/* ---------------------------------------------------------------- */
 /*  게임 데이터                                                       */
 /* ---------------------------------------------------------------- */
 const RESOURCE_META = {
@@ -204,11 +234,54 @@ export default function ChocolateFactoryTycoon() {
   const [tab, setTab] = useState('factory');
   const toastTimer = useRef(null);
 
+  // ---- 로그인 상태 & 저장 ----
+  const [player, setPlayer] = useState(null); // { id, username, password }
+  const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
+  const [lastSaved, setLastSaved] = useState(null);
+  const gRef = useRef(g);
+  useEffect(() => { gRef.current = g; }, [g]);
+
   const pushToast = useCallback((msg, tone = 'gold') => {
     setG((prev) => ({ ...prev, toast: { msg, tone, key: Date.now() } }));
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setG((prev) => ({ ...prev, toast: null })), 2200);
   }, []);
+
+  const handleAuth = useCallback(({ id, username, password, data }) => {
+    setPlayer({ id, username, password });
+    // 서버에 저장된 세이브가 있으면 불러오고, 없으면(신규 가입) 기본값 유지
+    if (data && Object.keys(data).length > 0) {
+      setG((prev) => ({ ...initialGame(), ...data, toast: null }));
+    }
+    pushToast(`${username}님, 환영해요!`, 'pistachio');
+  }, [pushToast]);
+
+  const saveNow = useCallback(async () => {
+    if (!player) return;
+    setSaveStatus('saving');
+    try {
+      const { toast, ...saveable } = gRef.current;
+      await supabaseRpc('save_game', { p_player_id: player.id, p_password: player.password, p_data: saveable });
+      setSaveStatus('saved');
+      setLastSaved(new Date());
+    } catch (err) {
+      setSaveStatus('error');
+      pushToast(`저장 실패: ${err.message}`, 'berry');
+    }
+  }, [player, pushToast]);
+
+  const logout = useCallback(async () => {
+    await saveNow();
+    setPlayer(null);
+    setG(initialGame());
+  }, [saveNow]);
+
+  // 20초마다 자동 저장 (로그인 + 게임 시작 상태일 때만)
+  useEffect(() => {
+    if (!player || !g.started) return;
+    const iv = setInterval(saveNow, 20000);
+    return () => clearInterval(iv);
+  }, [player, g.started, saveNow]);
 
   /* ---------------- 게임 틱 ---------------- */
   useEffect(() => {
@@ -233,6 +306,7 @@ export default function ChocolateFactoryTycoon() {
           const speed = (20 + line.level * 6) * (1 + speedBonus) + staffBoost;
           let progress = line.progress + speed;
           let blocked = false;
+          let blockedReason = null;
 
           if (progress >= 100) {
             const needed = {};
@@ -240,33 +314,37 @@ export default function ChocolateFactoryTycoon() {
             Object.entries(recipe.ing).forEach(([k, v]) => {
               // 재료가 원재료(RESOURCE_META)인지, 창고에 쌓인 완제품(하위 티어 초콜릿)인지 구분
               const isProductIngredient = !RESOURCE_META[k];
-              // 원재료 절감 업그레이드는 원재료에만 적용, 완제품 재료 소모량은 그대로
-              const amt = isProductIngredient ? v : v * (1 - ingSave);
+              // 원재료 절감 업그레이드는 "기본 초콜릿 3종(tier 1)"의 원재료에만 적용
+              const amt = isProductIngredient || recipe.tier !== 1 ? v : v * (1 - ingSave);
               needed[k] = { amt, isProductIngredient };
               const available = isProductIngredient ? (warehouse[k] || 0) : resources[k];
               if (available < amt) canProduce = false;
             });
-            if (canProduce) {
+            // 자동판매가 꺼져 있으면, 창고에 넣을 자리가 있는지도 미리 확인해서
+            // 재료만 소모되고 완성품이 증발하는 일이 없도록 한다
+            const whTotal = Object.values(warehouse).reduce((a, b) => a + b, 0);
+            const hasSpace = prev.autoSell || whTotal < prev.warehouseCap;
+            if (canProduce && hasSpace) {
               Object.entries(needed).forEach(([k, { amt, isProductIngredient }]) => {
                 if (isProductIngredient) warehouse[k] = (warehouse[k] || 0) - amt;
                 else resources[k] -= amt;
               });
               progress = 0;
               totalProduced += 1;
-              const whTotal = Object.values(warehouse).reduce((a, b) => a + b, 0);
               if (prev.autoSell) {
                 const sellPrice = recipe.price * priceMult;
                 money += sellPrice;
                 totalRevenue += sellPrice;
-              } else if (whTotal < prev.warehouseCap) {
+              } else {
                 warehouse[recipe.id] = (warehouse[recipe.id] || 0) + 1;
               }
             } else {
               progress = 100;
               blocked = true;
+              blockedReason = !canProduce ? 'ingredient' : 'warehouse';
             }
           }
-          return { ...line, progress, blocked };
+          return { ...line, progress, blocked, blockedReason };
         });
 
         const history = [...prev.history, { t: prev.history.length, money: Math.round(money) }].slice(-40);
@@ -282,10 +360,6 @@ export default function ChocolateFactoryTycoon() {
     }, 1000);
     return () => clearInterval(iv);
   }, [g.started]);
-
-  useEffect(() => {
-    // 업적 토스트 (별도 감시)
-  }, []);
 
   const prevAchRef = useRef([]);
   useEffect(() => {
@@ -381,12 +455,17 @@ export default function ChocolateFactoryTycoon() {
   };
 
   /* ---------------- 렌더 ---------------- */
+  if (!player) {
+    return <AuthScreen onAuth={handleAuth} />;
+  }
+
   if (!g.started) {
     return <WelcomeScreen onStart={() => setG((p) => ({ ...p, started: true }))} />;
   }
 
   const researchers = g.staff.filter((s) => s.role === 'research').length;
   const discount = Math.min(0.3, researchers * 0.04);
+  const priceMult = 1 + g.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.priceMult || 0), 0);
 
   const TABS = [
     { id: 'factory', label: '공장 & 창고', icon: Factory },
@@ -429,6 +508,22 @@ export default function ChocolateFactoryTycoon() {
           </div>
         </div>
 
+        {/* 계정 & 저장 상태 */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          <div style={{ fontSize: 11.5, color: C.creamDim }}>
+            👤 <span style={{ color: C.cream, fontWeight: 600 }}>{player.username}</span>
+            {'  '}·{'  '}
+            {saveStatus === 'saving' && '저장 중...'}
+            {saveStatus === 'saved' && lastSaved && `마지막 저장 ${lastSaved.toLocaleTimeString('ko-KR')}`}
+            {saveStatus === 'error' && <span style={{ color: C.berry }}>저장 실패</span>}
+            {saveStatus === 'idle' && '자동 저장 대기중 (20초마다)'}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn small variant="ghost" onClick={saveNow}>지금 저장</Btn>
+            <Btn small variant="ghost" onClick={logout}>로그아웃</Btn>
+          </div>
+        </div>
+
         {/* 컨베이어 벨트 시그니처 */}
         <div style={{
           marginTop: 14, height: 30, borderRadius: 8, overflow: 'hidden', position: 'relative',
@@ -441,7 +536,9 @@ export default function ChocolateFactoryTycoon() {
               return (
                 <span key={l.id} style={{ color: C.cream, fontFamily: "'JetBrains Mono', monospace", display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ opacity: l.blocked ? 0.4 : 1 }}>{r?.emoji}</span>
-                  <span style={{ fontSize: 11, color: l.blocked ? C.berry : C.pistachio }}>{l.blocked ? '재료부족' : `${Math.floor(l.progress)}%`}</span>
+                  <span style={{ fontSize: 11, color: l.blocked ? C.berry : C.pistachio }}>
+                    {l.blocked ? (l.blockedReason === 'warehouse' ? '창고가득' : '재료부족') : `${Math.floor(l.progress)}%`}
+                  </span>
                 </span>
               );
             })}
@@ -474,9 +571,9 @@ export default function ChocolateFactoryTycoon() {
       {/* 컨텐츠 */}
       <div style={{ padding: '20px 22px 0' }}>
         {tab === 'factory' && (
-          <FactoryTab g={g} buyLine={buyLine} setLineRecipe={setLineRecipe} upgradeLine={upgradeLine} assignStaff={assignStaff} setAutoSell={(v) => setG((p) => ({ ...p, autoSell: v }))} />
+          <FactoryTab g={g} priceMult={priceMult} buyLine={buyLine} setLineRecipe={setLineRecipe} upgradeLine={upgradeLine} assignStaff={assignStaff} setAutoSell={(v) => setG((p) => ({ ...p, autoSell: v }))} />
         )}
-        {tab === 'shop' && <ShopTab g={g} buyResource={buyResource} sellProduct={sellProduct} />}
+        {tab === 'shop' && <ShopTab g={g} priceMult={priceMult} buyResource={buyResource} sellProduct={sellProduct} />}
         {tab === 'upgrade' && <UpgradeTab g={g} discount={discount} buyUpgrade={buyUpgrade} />}
         {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} />}
         {tab === 'dashboard' && <DashboardTab g={g} />}
@@ -495,6 +592,98 @@ export default function ChocolateFactoryTycoon() {
           {g.toast.msg}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  로그인 / 회원가입 화면                                             */
+/* ---------------------------------------------------------------- */
+function AuthScreen({ onAuth }) {
+  const [mode, setMode] = useState('login'); // 'login' | 'signup'
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const inputStyle = {
+    width: '100%', background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`,
+    borderRadius: 9, padding: '10px 12px', fontSize: 14, fontFamily: "'Space Grotesk', sans-serif",
+    marginBottom: 12, outline: 'none',
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    setError('');
+    if (!username.trim() || !password) { setError('이름과 비밀번호를 입력해주세요'); return; }
+    setBusy(true);
+    try {
+      const fn = mode === 'login' ? 'login' : 'signup';
+      const rows = await supabaseRpc(fn, { p_username: username.trim(), p_password: password });
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      if (!row || !row.player_id) throw new Error('처리 중 문제가 생겼어요');
+      onAuth({ id: row.player_id, username: username.trim(), password, data: row.data || null });
+    } catch (err) {
+      setError(err.message || '문제가 생겼어요. 다시 시도해주세요');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{
+      minHeight: 640, background: `radial-gradient(circle at 30% 20%, #3B2716 0%, ${C.bgDeep} 60%)`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk', sans-serif", padding: 24,
+    }}>
+      <style>{FONT_IMPORT}</style>
+      <Panel style={{ width: '100%', maxWidth: 380, padding: 28 }}>
+        <div style={{ textAlign: 'center', marginBottom: 22 }}>
+          <div style={{ fontSize: 32, marginBottom: 6 }}>🏭</div>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, color: C.cream }}>카카오 앤 코</div>
+          <div style={{ fontSize: 11, color: C.creamDim, letterSpacing: 1, marginTop: 2 }}>
+            {mode === 'login' ? '이름과 비밀번호로 로그인하세요' : '새 계정을 만들어 시작하세요'}
+          </div>
+        </div>
+
+        <form onSubmit={submit}>
+          <input
+            style={inputStyle}
+            placeholder="이름 (2자 이상)"
+            value={username}
+            maxLength={20}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+          />
+          <input
+            style={{ ...inputStyle, marginBottom: 6 }}
+            placeholder="비밀번호 (4자 이상)"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          />
+          {error && <div style={{ color: C.berry, fontSize: 12, margin: '6px 0 10px' }}>⚠ {error}</div>}
+          <Btn
+            variant="gold"
+            disabled={busy}
+            style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
+            onClick={submit}
+          >
+            {busy ? '처리 중...' : mode === 'login' ? '로그인' : '회원가입'}
+          </Btn>
+        </form>
+
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12.5, color: C.creamDim }}>
+          {mode === 'login' ? '계정이 없으신가요?' : '이미 계정이 있으신가요?'}{' '}
+          <span
+            onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}
+            style={{ color: C.caramelLight, cursor: 'pointer', fontWeight: 600 }}
+          >
+            {mode === 'login' ? '회원가입' : '로그인'}
+          </span>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -560,7 +749,7 @@ function WelcomeScreen({ onStart }) {
 /* ---------------------------------------------------------------- */
 /*  공장 + 창고 탭                                                    */
 /* ---------------------------------------------------------------- */
-function FactoryTab({ g, buyLine, setLineRecipe, upgradeLine, assignStaff, setAutoSell }) {
+function FactoryTab({ g, priceMult, buyLine, setLineRecipe, upgradeLine, assignStaff, setAutoSell }) {
   const whTotal = Object.values(g.warehouse).reduce((a, b) => a + b, 0);
   return (
     <div>
@@ -603,12 +792,14 @@ function FactoryTab({ g, buyLine, setLineRecipe, upgradeLine, assignStaff, setAu
               </select>
 
               <div style={{ fontSize: 11, color: C.creamDim, marginBottom: 6 }}>
-                재료: {Object.entries(recipe.ing).map(([k, v]) => `${getIngredientMeta(k).emoji}${v}`).join(' ')} → 판매가 {recipe.price}냥
+                재료: {Object.entries(recipe.ing).map(([k, v]) => `${getIngredientMeta(k).emoji}${v}`).join(' ')} → 판매가 {fmt(recipe.price * priceMult)}냥
               </div>
 
               <ProgressBar pct={line.progress} color={line.blocked ? C.berry : C.pistachio} />
               <div style={{ fontSize: 11, color: line.blocked ? C.berry : C.creamDim, marginTop: 4, marginBottom: 12 }}>
-                {line.blocked ? '⚠ 원재료 부족 — 상점에서 구매하세요' : `생산 진행률 ${Math.floor(line.progress)}%`}
+                {line.blocked
+                  ? (line.blockedReason === 'warehouse' ? '⚠ 창고가 가득 찼어요 — 판매하거나 창고를 늘리세요' : '⚠ 원재료 부족 — 상점에서 구매하세요')
+                  : `생산 진행률 ${Math.floor(line.progress)}%`}
               </div>
 
               <select
@@ -654,7 +845,7 @@ function FactoryTab({ g, buyLine, setLineRecipe, upgradeLine, assignStaff, setAu
 /* ---------------------------------------------------------------- */
 /*  상점 & 거래 탭                                                    */
 /* ---------------------------------------------------------------- */
-function ShopTab({ g, buyResource, sellProduct }) {
+function ShopTab({ g, priceMult, buyResource, sellProduct }) {
   return (
     <div>
       <SectionTitle eyebrow="Trading Post" title="원재료 구매" />
@@ -686,7 +877,7 @@ function ShopTab({ g, buyResource, sellProduct }) {
             <Panel key={r.id} style={{ padding: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <span style={{ fontSize: 22 }}>{r.emoji}</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.pistachio, fontWeight: 700, fontSize: 13 }}>{r.price}냥/개</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.pistachio, fontWeight: 700, fontSize: 13 }}>{fmt(r.price * priceMult)}냥/개</span>
               </div>
               <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 2 }}>{r.name}</div>
               <div style={{ fontSize: 11.5, color: C.creamDim, marginBottom: 10 }}>창고 재고 {fmt(qty)}개</div>
