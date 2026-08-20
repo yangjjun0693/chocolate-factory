@@ -102,19 +102,51 @@ const ROLES = {
 };
 
 const ACHIEVEMENTS = [
-  { id: 'a1', name: '첫 생산', cond: (g) => g.totalProduced >= 1 },
-  { id: 'a2', name: '첫 매출', cond: (g) => g.totalRevenue >= 1 },
-  { id: 'a3', name: '자산 1,000냥', cond: (g) => g.money >= 1000 },
-  { id: 'a4', name: '자산 5,000냥', cond: (g) => g.money >= 5000 },
-  { id: 'a5', name: '생산 라인 3개', cond: (g) => g.lines.length >= 3 },
-  { id: 'a6', name: '직원 3명 고용', cond: (g) => g.staff.length >= 3 },
-  { id: 'a7', name: '업그레이드 4개', cond: (g) => g.upgrades.length >= 4 },
-  { id: 'a8', name: '누적 생산 100개', cond: (g) => g.totalProduced >= 100 },
+  { id: 'a1', name: '첫 생산', desc: '초콜릿을 처음으로 생산해요', cond: (g) => g.totalProduced >= 1 },
+  { id: 'a2', name: '첫 매출', desc: '초콜릿을 처음으로 판매해요', cond: (g) => g.totalRevenue >= 1 },
+  { id: 'a3', name: '자산 1,000냥', desc: '보유 자산 1,000냥을 달성해요', cond: (g) => g.money >= 1000 },
+  { id: 'a4', name: '자산 5,000냥', desc: '보유 자산 5,000냥을 달성해요', cond: (g) => g.money >= 5000 },
+  { id: 'a9', name: '자산 10,000냥', desc: '보유 자산 10,000냥을 달성해요', cond: (g) => g.money >= 10000 },
+  { id: 'a10', name: '자산 50,000냥', desc: '보유 자산 50,000냥을 달성해요', cond: (g) => g.money >= 50000 },
+  { id: 'a11', name: '자산 100,000냥', desc: '보유 자산 100,000냥을 달성해요', cond: (g) => g.money >= 100000 },
+  { id: 'a5', name: '생산 라인 3개', desc: '생산 라인을 3개까지 늘려요', cond: (g) => g.lines.length >= 3 },
+  { id: 'a20', name: '생산 라인 풀확장', desc: '생산 라인 슬롯을 최대치까지 확장해요', cond: (g) => g.maxLines >= MAX_LINE_CAP },
+  { id: 'a6', name: '직원 3명 고용', desc: '직원을 3명 고용해요', cond: (g) => g.staff.length >= 3 },
+  { id: 'a16', name: '직원 5명 고용', desc: '직원을 5명 고용해요', cond: (g) => g.staff.length >= 5 },
+  { id: 'a17', name: '베테랑 직원', desc: '레벨 5 이상인 직원을 배출해요', cond: (g) => g.staff.some((s) => s.level >= 5) },
+  { id: 'a26', name: '전설의 직원', desc: '레벨 10(만렙) 직원을 배출해요', cond: (g) => g.staff.some((s) => s.level >= STAFF_MAX_LEVEL) },
+  { id: 'a7', name: '업그레이드 4개', desc: '업그레이드를 4개 연구해요', cond: (g) => g.upgrades.length >= 4 },
+  { id: 'a18', name: '연구 완료', desc: '모든 업그레이드를 연구해요', cond: (g) => g.upgrades.length >= UPGRADES.length },
+  { id: 'a19', name: '전 라인업 확보', desc: '모든 초콜릿 레시피를 잠금 해제해요', cond: (g) => g.unlockedRecipes.length >= RECIPES.length },
+  { id: 'a8', name: '누적 생산 100개', desc: '초콜릿을 누적 100개 생산해요', cond: (g) => g.totalProduced >= 100 },
+  { id: 'a12', name: '누적 생산 500개', desc: '초콜릿을 누적 500개 생산해요', cond: (g) => g.totalProduced >= 500 },
+  { id: 'a13', name: '누적 생산 2,000개', desc: '초콜릿을 누적 2,000개 생산해요', cond: (g) => g.totalProduced >= 2000 },
+  { id: 'a14', name: '누적 매출 10,000냥', desc: '누적 매출 10,000냥을 달성해요', cond: (g) => g.totalRevenue >= 10000 },
+  { id: 'a15', name: '누적 매출 50,000냥', desc: '누적 매출 50,000냥을 달성해요', cond: (g) => g.totalRevenue >= 50000 },
+  { id: 'a21', name: '창고왕', desc: '창고 용량을 500 이상으로 늘려요', cond: (g) => g.warehouseCap >= 500 },
+  { id: 'a22', name: '빚 청산', desc: '대출을 받은 뒤 잔액을 모두 갚아요', cond: (g) => g.totalLoanTaken > 0 && g.debt === 0 },
+  { id: 'a23', name: '잭팟!', desc: '카지노에서 트리플 매치를 터뜨려요', cond: (g) => g.casinoJackpotCount >= 1 },
+  { id: 'a24', name: '카지노 큰손', desc: '카지노 잭팟을 3회 터뜨려요', cond: (g) => g.casinoJackpotCount >= 3 },
+  { id: 'a25', name: '무차입 경영', desc: '빚 없이 자산 20,000냥을 달성해요', cond: (g) => g.money >= 20000 && g.debt === 0 },
 ];
 
 const LINE_COST = (n) => 260 + n * 320;
 const LEVEL_COST = (lvl) => 80 + lvl * 80;
 const STAFF_COST = (n) => 120 + n * 90;
+const STAFF_LEVEL_COST = (lvl) => 150 + lvl * 130;
+const STAFF_MAX_LEVEL = 10;
+
+// 생산직 보너스: 라인에 배정된 생산직의 레벨은 그 라인 속도(staffBoost)뿐 아니라
+// "생산 라인 속도가 0초에 수렴해도" 계속 의미가 있도록 전체 판매 수익에도 보너스를 준다.
+const STAFF_REVENUE_PER_LEVEL = 0.03; // 배정된 생산직 레벨 1당 판매 수익 +3%
+const STAFF_REVENUE_CAP = 1.0; // 최대 +100%
+function getStaffRevenueMult(staff, lines) {
+  const bonus = lines.reduce((sum, l) => {
+    const st = staff.find((s) => s.id === l.staffId && s.role === 'production');
+    return sum + (st ? st.level * STAFF_REVENUE_PER_LEVEL : 0);
+  }, 0);
+  return 1 + Math.min(STAFF_REVENUE_CAP, bonus);
+}
 
 // 대출 시스템
 const LOAN_INTEREST_RATE = 0.0008; // 초당 복리 이자율
@@ -144,7 +176,9 @@ const initialGame = () => ({
   warehouse: {},
   warehouseCap: 220,
   debt: 0,
+  totalLoanTaken: 0,
   casinoLast: null,
+  casinoJackpotCount: 0,
   lines: [{ id: 1, recipeId: 'dark', level: 1, progress: 0, staffId: null, blocked: false }],
   maxLines: 4,
   staff: [],
@@ -319,6 +353,7 @@ export default function ChocolateFactoryTycoon() {
         const speedBonus = prev.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.speed || 0), 0);
         const ingSave = prev.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.ingSave || 0), 0);
         const priceMult = 1 + prev.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.priceMult || 0), 0);
+        const staffRevMult = getStaffRevenueMult(prev.staff, prev.lines);
 
         let resources = { ...prev.resources };
         let warehouse = { ...prev.warehouse };
@@ -361,7 +396,7 @@ export default function ChocolateFactoryTycoon() {
               progress = 0;
               totalProduced += 1;
               if (prev.autoSell) {
-                const sellPrice = recipe.price * priceMult;
+                const sellPrice = recipe.price * priceMult * staffRevMult;
                 money += sellPrice;
                 totalRevenue += sellPrice;
               } else {
@@ -416,7 +451,8 @@ export default function ChocolateFactoryTycoon() {
       if (sellAmt <= 0) return prev;
       const recipe = RECIPES.find((r) => r.id === recipeId);
       const priceMult = 1 + prev.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.priceMult || 0), 0);
-      const revenue = recipe.price * priceMult * sellAmt;
+      const staffRevMult = getStaffRevenueMult(prev.staff, prev.lines);
+      const revenue = recipe.price * priceMult * staffRevMult * sellAmt;
       return {
         ...prev,
         money: prev.money + revenue,
@@ -477,6 +513,22 @@ export default function ChocolateFactoryTycoon() {
     pushToast('새 직원을 고용했어요', 'pistachio');
   };
 
+  const levelUpStaff = (staffId) => {
+    setG((prev) => {
+      const member = prev.staff.find((s) => s.id === staffId);
+      if (!member) return prev;
+      if (member.level >= STAFF_MAX_LEVEL) { pushToast('이미 최고 레벨이에요', 'berry'); return prev; }
+      const cost = STAFF_LEVEL_COST(member.level);
+      if (prev.money < cost) { pushToast('자금이 부족해요', 'berry'); return prev; }
+      return {
+        ...prev,
+        money: prev.money - cost,
+        staff: prev.staff.map((s) => (s.id === staffId ? { ...s, level: s.level + 1 } : s)),
+      };
+    });
+    pushToast('📈 직원을 훈련시켰어요 (레벨 업)', 'pistachio');
+  };
+
   const buyUpgrade = (up) => {
     setG((prev) => {
       const researchers = prev.staff.filter((s) => s.role === 'research').length;
@@ -496,7 +548,7 @@ export default function ChocolateFactoryTycoon() {
   const takeLoan = (amount) => {
     setG((prev) => {
       if (prev.debt + amount > MAX_DEBT) { pushToast('대출 한도를 초과했어요', 'berry'); return prev; }
-      return { ...prev, money: prev.money + amount, debt: prev.debt + amount };
+      return { ...prev, money: prev.money + amount, debt: prev.debt + amount, totalLoanTaken: prev.totalLoanTaken + amount };
     });
     pushToast(`🏦 ${fmt(amount)}냥 대출 받았어요`, 'gold');
   };
@@ -530,7 +582,12 @@ export default function ChocolateFactoryTycoon() {
       payout = Math.round(bet * 0.5);
       outcome = 'partial';
     }
-    setG((prev) => ({ ...prev, money: prev.money - bet + payout, casinoLast: { reels, payout, bet, outcome, key: Date.now() } }));
+    setG((prev) => ({
+      ...prev,
+      money: prev.money - bet + payout,
+      casinoLast: { reels, payout, bet, outcome, key: Date.now() },
+      casinoJackpotCount: prev.casinoJackpotCount + (outcome === 'jackpot' ? 1 : 0),
+    }));
     if (outcome === 'jackpot') pushToast(`🎰 트리플 매치! +${fmt(payout)}냥`, 'gold');
     else if (outcome === 'partial') pushToast('🎰 페어 — 베팅 절반 회수', 'pistachio');
     else pushToast(`🎰 꽝... -${fmt(bet)}냥`, 'berry');
@@ -548,6 +605,8 @@ export default function ChocolateFactoryTycoon() {
   const researchers = g.staff.filter((s) => s.role === 'research').length;
   const discount = Math.min(0.3, researchers * 0.04);
   const priceMult = 1 + g.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.priceMult || 0), 0);
+  const staffRevMult = getStaffRevenueMult(g.staff, g.lines);
+  const displayPriceMult = priceMult * staffRevMult;
 
   const TABS = [
     { id: 'factory', label: '공장 & 창고', icon: Factory },
@@ -556,6 +615,8 @@ export default function ChocolateFactoryTycoon() {
     { id: 'staff', label: '직원 관리', icon: Users },
     { id: 'finance', label: '대출 & 카지노', icon: Coins },
     { id: 'dashboard', label: '대시보드', icon: LayoutDashboard },
+    { id: 'achievements', label: '도전과제', icon: Award },
+    { id: 'leaderboard', label: '랭킹', icon: TrendingUp },
   ];
 
   return (
@@ -655,13 +716,15 @@ export default function ChocolateFactoryTycoon() {
       {/* 컨텐츠 */}
       <div style={{ padding: '20px 22px 0' }}>
         {tab === 'factory' && (
-          <FactoryTab g={g} priceMult={priceMult} buyLine={buyLine} expandLineSlot={expandLineSlot} setLineRecipe={setLineRecipe} upgradeLine={upgradeLine} assignStaff={assignStaff} setAutoSell={(v) => setG((p) => ({ ...p, autoSell: v }))} />
+          <FactoryTab g={g} priceMult={displayPriceMult} buyLine={buyLine} expandLineSlot={expandLineSlot} setLineRecipe={setLineRecipe} upgradeLine={upgradeLine} assignStaff={assignStaff} setAutoSell={(v) => setG((p) => ({ ...p, autoSell: v }))} />
         )}
-        {tab === 'shop' && <ShopTab g={g} priceMult={priceMult} buyResource={buyResource} sellProduct={sellProduct} />}
+        {tab === 'shop' && <ShopTab g={g} priceMult={displayPriceMult} buyResource={buyResource} sellProduct={sellProduct} />}
         {tab === 'upgrade' && <UpgradeTab g={g} discount={discount} buyUpgrade={buyUpgrade} />}
-        {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} />}
+        {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} levelUpStaff={levelUpStaff} staffRevMult={staffRevMult} />}
         {tab === 'finance' && <FinanceTab g={g} takeLoan={takeLoan} repayLoan={repayLoan} playCasino={playCasino} />}
         {tab === 'dashboard' && <DashboardTab g={g} resetGame={resetGame} />}
+        {tab === 'achievements' && <AchievementsTab g={g} />}
+        {tab === 'leaderboard' && <LeaderboardTab currentUsername={player.username} currentMoney={g.money} />}
       </div>
 
       {/* 토스트 */}
@@ -1060,10 +1123,19 @@ function UpgradeTab({ g, discount, buyUpgrade }) {
 /* ---------------------------------------------------------------- */
 /*  직원 관리 탭                                                      */
 /* ---------------------------------------------------------------- */
-function StaffTab({ g, hireStaff }) {
+function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult }) {
+  const assignedLineOf = (staffId) => g.lines.find((l) => l.staffId === staffId);
   return (
     <div>
-      <SectionTitle eyebrow="Human Resources" title="직원 관리" />
+      <SectionTitle
+        eyebrow="Human Resources"
+        title="직원 관리"
+        right={
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, color: C.pistachio }}>
+            생산직 판매 보너스 +{Math.round((staffRevMult - 1) * 100)}%
+          </span>
+        }
+      />
       <div style={{ display: 'flex', gap: 10, marginBottom: 22, flexWrap: 'wrap' }}>
         {Object.entries(ROLES).map(([key, role]) => (
           <Panel key={key} style={{ padding: 14, flex: '1 1 240px' }}>
@@ -1071,7 +1143,11 @@ function StaffTab({ g, hireStaff }) {
               <UserPlus size={16} color={role.color} />
               <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream }}>{role.label}</span>
             </div>
-            <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 12 }}>{role.desc}</div>
+            <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 12, lineHeight: 1.5 }}>
+              {role.desc}
+              {key === 'production' && ' 라인에 배정하면 속도뿐 아니라 판매 수익도 레벨당 +3%(최대 +100%) 늘어나요, 라인 속도가 이미 빨라도 계속 쓸모있어요.'}
+              {key === 'research' && ' 레벨과 무관하게 인원수에 비례해 업그레이드 비용을 깎아줘요(최대 -30%).'}
+            </div>
             <Btn small variant="ghost" onClick={() => hireStaff(key)} style={{ width: '100%', justifyContent: 'center' }}>
               고용하기 ({fmt(STAFF_COST(g.staff.length))}냥)
             </Btn>
@@ -1083,18 +1159,42 @@ function StaffTab({ g, hireStaff }) {
         현재 직원 ({g.staff.length}명)
       </div>
       {g.staff.length === 0 && <div style={{ color: C.creamDim, fontSize: 13 }}>아직 고용한 직원이 없어요.</div>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px,1fr))', gap: 10 }}>
-        {g.staff.map((s) => (
-          <Panel key={s.id} style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', background: ROLES[s.role].color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#1C1108', fontSize: 13 }}>
-              {s.name[0]}
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.cream }}>{s.name}</div>
-              <div style={{ fontSize: 11, color: C.creamDim }}>{ROLES[s.role].label} · Lv.{s.level}</div>
-            </div>
-          </Panel>
-        ))}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px,1fr))', gap: 10 }}>
+        {g.staff.map((s) => {
+          const maxed = s.level >= STAFF_MAX_LEVEL;
+          const cost = STAFF_LEVEL_COST(s.level);
+          const line = s.role === 'production' ? assignedLineOf(s.id) : null;
+          return (
+            <Panel key={s.id} style={{ padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: ROLES[s.role].color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#1C1108', fontSize: 13, flexShrink: 0 }}>
+                  {s.name[0]}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.cream }}>{s.name}</div>
+                  <div style={{ fontSize: 11, color: C.creamDim }}>{ROLES[s.role].label} · Lv.{s.level}{maxed ? ' (MAX)' : ''}</div>
+                </div>
+              </div>
+              {s.role === 'production' && (
+                <div style={{ fontSize: 10.5, color: line ? C.pistachio : C.creamDim, marginBottom: 8 }}>
+                  {line ? `라인 배정중 · 속도+${s.level * 9} · 수익+${Math.round(s.level * STAFF_REVENUE_PER_LEVEL * 100)}%` : '라인 미배정 (공장 탭에서 배정하세요)'}
+                </div>
+              )}
+              {s.role === 'research' && (
+                <div style={{ fontSize: 10.5, color: C.pistachio, marginBottom: 8 }}>업그레이드 비용 할인에 기여중</div>
+              )}
+              <Btn
+                small
+                variant={maxed ? 'ghost' : 'primary'}
+                disabled={maxed || g.money < cost}
+                onClick={() => levelUpStaff(s.id)}
+                style={{ width: '100%', justifyContent: 'center' }}
+              >
+                <Gauge size={13} /> {maxed ? '최고 레벨' : `레벨업 (${fmt(cost)}냥)`}
+              </Btn>
+            </Panel>
+          );
+        })}
       </div>
     </div>
   );
@@ -1247,18 +1347,158 @@ function DashboardTab({ g, resetGame }) {
         </div>
       </Panel>
 
-      <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 10 }}>업적</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px,1fr))', gap: 10 }}>
+      <Panel style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Award size={20} color={C.gold} />
+          <div>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15 }}>업적</div>
+            <div style={{ fontSize: 11.5, color: C.creamDim }}>{g.achievements.length} / {ACHIEVEMENTS.length}개 달성</div>
+          </div>
+        </div>
+        <span style={{ fontSize: 11.5, color: C.caramelLight }}>자세한 목록은 "도전과제" 탭에서 확인하세요 →</span>
+      </Panel>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  도전과제 탭                                                       */
+/* ---------------------------------------------------------------- */
+function AchievementsTab({ g }) {
+  const doneCount = g.achievements.length;
+  return (
+    <div>
+      <SectionTitle
+        eyebrow="Milestones"
+        title="도전과제"
+        right={<span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, color: C.gold }}>{doneCount} / {ACHIEVEMENTS.length} 달성</span>}
+      />
+      <Panel style={{ padding: 16, marginBottom: 18 }}>
+        <ProgressBar pct={(doneCount / ACHIEVEMENTS.length) * 100} color={C.gold} height={10} />
+      </Panel>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px,1fr))', gap: 10 }}>
         {ACHIEVEMENTS.map((a) => {
           const done = g.achievements.includes(a.id);
           return (
-            <Panel key={a.id} style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 8, opacity: done ? 1 : 0.5 }}>
-              <Award size={16} color={done ? C.gold : C.creamDim} />
-              <span style={{ fontSize: 12.5, color: C.cream }}>{a.name}</span>
+            <Panel key={a.id} style={{ padding: 14, display: 'flex', alignItems: 'flex-start', gap: 10, opacity: done ? 1 : 0.6, borderColor: done ? C.gold : C.line }}>
+              <Award size={18} color={done ? C.gold : C.creamDim} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: done ? C.cream : C.creamDim }}>{a.name}</div>
+                {a.desc && <div style={{ fontSize: 11, color: C.creamDim, marginTop: 3, lineHeight: 1.4 }}>{a.desc}</div>}
+              </div>
             </Panel>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  랭킹(리더보드) 탭                                                  */
+/*  - Supabase RPC get_leaderboard()로 전체 플레이어의 최신 저장 데이터   */
+/*    중 자산(money) 상위 N명을 집계해서 보여준다.                       */
+/*  - security definer 함수라 players/game_saves 테이블에 RLS가 걸려    */
+/*    있어도 username과 자산만 안전하게 노출된다(비밀번호 등은 없음).      */
+/* ---------------------------------------------------------------- */
+const MEDAL = ['🥇', '🥈', '🥉'];
+
+function LeaderboardTab({ currentUsername, currentMoney }) {
+  const [rows, setRows] = useState(null); // null = 로딩 전, [] = 로딩됨(결과 없음)
+  const [status, setStatus] = useState('idle'); // idle | loading | error
+  const [errMsg, setErrMsg] = useState('');
+
+  const load = useCallback(async () => {
+    setStatus('loading');
+    setErrMsg('');
+    try {
+      const data = await supabaseRpc('get_leaderboard', { p_limit: 20 });
+      setRows(Array.isArray(data) ? data : []);
+      setStatus('idle');
+    } catch (err) {
+      setStatus('error');
+      setErrMsg(err.message || '랭킹을 불러오지 못했어요');
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const myRank = rows ? rows.findIndex((r) => r.username === currentUsername) : -1;
+
+  return (
+    <div>
+      <SectionTitle
+        eyebrow="Hall of Fame"
+        title="랭킹"
+        right={
+          <Btn small variant="ghost" onClick={load} disabled={status === 'loading'}>
+            {status === 'loading' ? '불러오는 중...' : '새로고침'}
+          </Btn>
+        }
+      />
+
+      <Panel style={{ padding: 16, marginBottom: 18 }}>
+        <div style={{ fontSize: 12, color: C.creamDim, lineHeight: 1.6 }}>
+          전체 공장주 중 자산(money) 기준 상위 20명이에요. 자동 저장될 때마다 순위가 갱신돼요.
+        </div>
+      </Panel>
+
+      {status === 'error' && (
+        <Panel style={{ padding: 16, marginBottom: 18, border: `1px solid ${C.berry}` }}>
+          <div style={{ color: C.berry, fontSize: 13, fontWeight: 600 }}>⚠ {errMsg}</div>
+        </Panel>
+      )}
+
+      {rows === null && status !== 'error' && (
+        <Panel style={{ padding: 24, textAlign: 'center', color: C.creamDim, fontSize: 13 }}>
+          랭킹을 불러오는 중...
+        </Panel>
+      )}
+
+      {rows !== null && rows.length === 0 && status !== 'error' && (
+        <Panel style={{ padding: 24, textAlign: 'center', color: C.creamDim, fontSize: 13 }}>
+          아직 랭킹에 표시할 데이터가 없어요.
+        </Panel>
+      )}
+
+      {rows !== null && rows.length > 0 && (
+        <Panel style={{ padding: 0, overflow: 'hidden', marginBottom: 18 }}>
+          {rows.map((r, i) => {
+            const isMe = r.username === currentUsername;
+            return (
+              <div
+                key={`${r.username}-${i}`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                  borderBottom: i === rows.length - 1 ? 'none' : `1px solid ${C.line}`,
+                  background: isMe ? C.bgPanelLighter : 'transparent',
+                }}
+              >
+                <div style={{ width: 30, textAlign: 'center', fontSize: i < 3 ? 18 : 13, fontWeight: 700, color: i < 3 ? C.gold : C.creamDim, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {i < 3 ? MEDAL[i] : `#${i + 1}`}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: isMe ? C.gold : C.cream, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.username}{isMe && ' (나)'}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: C.creamDim }}>
+                    누적 매출 {fmt(Number(r.total_revenue) || 0)}냥 · 생산 {fmt(Number(r.total_produced) || 0)}개
+                  </div>
+                </div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: C.gold, fontSize: 14, whiteSpace: 'nowrap' }}>
+                  {fmt(Number(r.money) || 0)}냥
+                </div>
+              </div>
+            );
+          })}
+        </Panel>
+      )}
+
+      {rows !== null && rows.length > 0 && myRank === -1 && (
+        <div style={{ fontSize: 11.5, color: C.creamDim, textAlign: 'center' }}>
+          현재 자산 {fmt(currentMoney)}냥으로는 상위 20위 안에 들지 못했어요. 저장 후 다시 확인해보세요!
+        </div>
+      )}
     </div>
   );
 }
