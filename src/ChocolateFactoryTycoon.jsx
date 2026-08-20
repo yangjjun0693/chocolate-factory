@@ -163,6 +163,41 @@ const CASINO_BETS = [50, 200, 500];
 const MAX_LINE_CAP = 10;
 const LINE_SLOT_COST = (maxLines) => 600 + (maxLines - 4) * 500;
 
+// 주식 시스템 — 실제 기업과 무관한 패러디 성격의 가상 회사 4곳
+const STOCKS = [
+  {
+    id: 'dino', ticker: 'DINO', name: '다이노버스 파크', emoji: '🦖',
+    sector: '테마파크 · 영화 프랜차이즈',
+    basePrice: 120, volatility: 0.045, drift: 0.0006,
+    newsPos: ['신규 공룡 종 복원 성공, 입장객 폭증', '박스오피스 신기록! 후속편 제작 확정', '테마파크 신규 지점 개장 발표'],
+    newsNeg: ['안전 사고로 일부 구역 임시 폐쇄', '공룡 탈출 소동... 주가 출렁', '흥행 부진, 후속편 제작 무기한 연기'],
+  },
+  {
+    id: 'taco', ticker: 'TACO', name: '타코킹 푸드', emoji: '🌮',
+    sector: '패스트푸드 프랜차이즈',
+    basePrice: 45, volatility: 0.03, drift: 0.0004,
+    newsPos: ['신메뉴 대박, 매출 급증', '심야 배달 서비스 확대', '한정판 메뉴 출시 당일 완판'],
+    newsNeg: ['식자재 가격 급등으로 마진 축소', '위생 논란으로 불매 운동 확산', '경쟁사 신메뉴에 점유율 하락'],
+  },
+  {
+    id: 'beast', ticker: 'BEAST', name: '챌린지비스트 미디어', emoji: '🎬',
+    sector: '챌린지 · 콘텐츠 미디어',
+    basePrice: 80, volatility: 0.06, drift: 0.0008,
+    newsPos: ['초대형 상금 챌린지 영상 조회수 폭발', '신규 구독 서비스 가입자 급증', '자선 프로젝트로 브랜드 이미지 상승'],
+    newsNeg: ['제작비 급증으로 수익성 우려', '콘텐츠 논란으로 광고주 이탈', '경쟁 채널 성장에 점유율 하락'],
+  },
+  {
+    id: 'voca', ticker: 'VOCA', name: '신디보이스 스튜디오', emoji: '🎤',
+    sector: '보컬 신디사이저 소프트웨어',
+    basePrice: 60, volatility: 0.05, drift: 0.0005,
+    newsPos: ['신규 보이스뱅크 출시, 예약 매진', '해외 라이선스 계약 체결', '팬 창작 콘텐츠 100만 건 돌파'],
+    newsNeg: ['신규 캐릭터 저작권 분쟁', '경쟁 소프트웨어 등장으로 점유율 하락', '서버 장애로 서비스 일시 중단'],
+  },
+];
+const STOCK_NEWS_CHANCE = 0.02; // 틱(1초)당 종목별 뉴스 이벤트 발생 확률
+const STOCK_NEWS_IMPACT = 0.12; // 뉴스 이벤트 시 가격 충격 크기
+const STOCK_HISTORY_LEN = 30;
+
 const fmt = (n) => Math.floor(n).toLocaleString('ko-KR');
 
 /* ---------------------------------------------------------------- */
@@ -179,6 +214,12 @@ const initialGame = () => ({
   totalLoanTaken: 0,
   casinoLast: null,
   casinoJackpotCount: 0,
+  stocks: Object.fromEntries(STOCKS.map((s) => [s.id, s.basePrice])),
+  stockHistory: Object.fromEntries(STOCKS.map((s) => [s.id, [{ t: 0, p: s.basePrice }]])),
+  portfolio: Object.fromEntries(STOCKS.map((s) => [s.id, 0])),
+  stockAvgCost: Object.fromEntries(STOCKS.map((s) => [s.id, 0])),
+  stockNews: [],
+  stockRealizedPL: 0,
   lines: [{ id: 1, recipeId: 'dark', level: 1, progress: 0, staffId: null, blocked: false }],
   maxLines: 4,
   staff: [],
