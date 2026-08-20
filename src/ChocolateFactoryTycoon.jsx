@@ -104,11 +104,11 @@ const ROLES = {
 const ACHIEVEMENTS = [
   { id: 'a1', name: '첫 생산', desc: '초콜릿을 처음으로 생산해요', cond: (g) => g.totalProduced >= 1 },
   { id: 'a2', name: '첫 매출', desc: '초콜릿을 처음으로 판매해요', cond: (g) => g.totalRevenue >= 1 },
-  { id: 'a3', name: '자산 1,000냥', desc: '보유 자산 1,000냥을 달성해요', cond: (g) => g.money >= 1000 },
-  { id: 'a4', name: '자산 5,000냥', desc: '보유 자산 5,000냥을 달성해요', cond: (g) => g.money >= 5000 },
-  { id: 'a9', name: '자산 10,000냥', desc: '보유 자산 10,000냥을 달성해요', cond: (g) => g.money >= 10000 },
-  { id: 'a10', name: '자산 50,000냥', desc: '보유 자산 50,000냥을 달성해요', cond: (g) => g.money >= 50000 },
-  { id: 'a11', name: '자산 100,000냥', desc: '보유 자산 100,000냥을 달성해요', cond: (g) => g.money >= 100000 },
+  { id: 'a3', name: '자산 1,000불', desc: '보유 자산 1,000불을 달성해요', cond: (g) => g.money >= 1000 },
+  { id: 'a4', name: '자산 5,000불', desc: '보유 자산 5,000불을 달성해요', cond: (g) => g.money >= 5000 },
+  { id: 'a9', name: '자산 10,000불', desc: '보유 자산 10,000불을 달성해요', cond: (g) => g.money >= 10000 },
+  { id: 'a10', name: '자산 50,000불', desc: '보유 자산 50,000불을 달성해요', cond: (g) => g.money >= 50000 },
+  { id: 'a11', name: '자산 100,000불', desc: '보유 자산 100,000불을 달성해요', cond: (g) => g.money >= 100000 },
   { id: 'a5', name: '생산 라인 3개', desc: '생산 라인을 3개까지 늘려요', cond: (g) => g.lines.length >= 3 },
   { id: 'a20', name: '생산 라인 풀확장', desc: '생산 라인 슬롯을 최대치까지 확장해요', cond: (g) => g.maxLines >= MAX_LINE_CAP },
   { id: 'a6', name: '직원 3명 고용', desc: '직원을 3명 고용해요', cond: (g) => g.staff.length >= 3 },
@@ -121,13 +121,13 @@ const ACHIEVEMENTS = [
   { id: 'a8', name: '누적 생산 100개', desc: '초콜릿을 누적 100개 생산해요', cond: (g) => g.totalProduced >= 100 },
   { id: 'a12', name: '누적 생산 500개', desc: '초콜릿을 누적 500개 생산해요', cond: (g) => g.totalProduced >= 500 },
   { id: 'a13', name: '누적 생산 2,000개', desc: '초콜릿을 누적 2,000개 생산해요', cond: (g) => g.totalProduced >= 2000 },
-  { id: 'a14', name: '누적 매출 10,000냥', desc: '누적 매출 10,000냥을 달성해요', cond: (g) => g.totalRevenue >= 10000 },
-  { id: 'a15', name: '누적 매출 50,000냥', desc: '누적 매출 50,000냥을 달성해요', cond: (g) => g.totalRevenue >= 50000 },
+  { id: 'a14', name: '누적 매출 10,000불', desc: '누적 매출 10,000불을 달성해요', cond: (g) => g.totalRevenue >= 10000 },
+  { id: 'a15', name: '누적 매출 50,000불', desc: '누적 매출 50,000불을 달성해요', cond: (g) => g.totalRevenue >= 50000 },
   { id: 'a21', name: '창고왕', desc: '창고 용량을 500 이상으로 늘려요', cond: (g) => g.warehouseCap >= 500 },
   { id: 'a22', name: '빚 청산', desc: '대출을 받은 뒤 잔액을 모두 갚아요', cond: (g) => g.totalLoanTaken > 0 && g.debt === 0 },
   { id: 'a23', name: '잭팟!', desc: '카지노에서 트리플 매치를 터뜨려요', cond: (g) => g.casinoJackpotCount >= 1 },
   { id: 'a24', name: '카지노 큰손', desc: '카지노 잭팟을 3회 터뜨려요', cond: (g) => g.casinoJackpotCount >= 3 },
-  { id: 'a25', name: '무차입 경영', desc: '빚 없이 자산 20,000냥을 달성해요', cond: (g) => g.money >= 20000 && g.debt === 0 },
+  { id: 'a25', name: '무차입 경영', desc: '빚 없이 자산 20,000불을 달성해요', cond: (g) => g.money >= 20000 && g.debt === 0 },
 ];
 
 const LINE_COST = (n) => 260 + n * 320;
@@ -591,7 +591,7 @@ export default function ChocolateFactoryTycoon() {
       if (prev.debt + amount > MAX_DEBT) { pushToast('대출 한도를 초과했어요', 'berry'); return prev; }
       return { ...prev, money: prev.money + amount, debt: prev.debt + amount, totalLoanTaken: prev.totalLoanTaken + amount };
     });
-    pushToast(`🏦 ${fmt(amount)}냥 대출 받았어요`, 'gold');
+    pushToast(`🏦 ${fmt(amount)}불 대출 받았어요`, 'gold');
   };
 
   const repayLoan = (amount) => {
@@ -611,9 +611,9 @@ export default function ChocolateFactoryTycoon() {
       casinoLast: { reels, payout, bet, outcome, key: Date.now() },
       casinoJackpotCount: prev.casinoJackpotCount + (outcome === 'jackpot' ? 1 : 0),
     }));
-    if (outcome === 'jackpot') pushToast(`🎰 트리플 매치! +${fmt(payout)}냥`, 'gold');
+    if (outcome === 'jackpot') pushToast(`🎰 트리플 매치! +${fmt(payout)}불`, 'gold');
     else if (outcome === 'partial') pushToast('🎰 페어 — 베팅 절반 회수', 'pistachio');
-    else pushToast(`🎰 꽝... -${fmt(bet)}냥`, 'berry');
+    else pushToast(`🎰 꽝... -${fmt(bet)}불`, 'berry');
   };
 
   /* ---------------- 렌더 ---------------- */
@@ -671,8 +671,8 @@ export default function ChocolateFactoryTycoon() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <StatChip icon="💰" label="자산" value={`${fmt(g.money)}냥`} accent={C.gold} />
-            {g.debt > 0 && <StatChip icon="🏦" label="대출금" value={`${fmt(g.debt)}냥`} accent={C.berry} />}
+            <StatChip icon="💰" label="자산" value={`${fmt(g.money)}불`} accent={C.gold} />
+            {g.debt > 0 && <StatChip icon="🏦" label="대출금" value={`${fmt(g.debt)}불`} accent={C.berry} />}
             <StatChip icon="🌰" label="카카오" value={fmt(g.resources.cacao)} />
             <StatChip icon="🧂" label="설탕" value={fmt(g.resources.sugar)} />
             <StatChip icon="🥛" label="우유" value={fmt(g.resources.freshMilk)} />
@@ -939,10 +939,10 @@ function FactoryTab({ g, priceMult, buyLine, expandLineSlot, setLineRecipe, upgr
               생산 즉시 자동 판매
             </label>
             <Btn onClick={buyLine} disabled={g.lines.length >= g.maxLines}>
-              <Plus size={14} /> 라인 추가 ({fmt(LINE_COST(g.lines.length))}냥)
+              <Plus size={14} /> 라인 추가 ({fmt(LINE_COST(g.lines.length))}불)
             </Btn>
             <Btn variant="ghost" onClick={expandLineSlot} disabled={g.maxLines >= MAX_LINE_CAP}>
-              <ArrowUpCircle size={14} /> 슬롯 확장 {g.maxLines >= MAX_LINE_CAP ? '(최대)' : `(${fmt(LINE_SLOT_COST(g.maxLines))}냥)`}
+              <ArrowUpCircle size={14} /> 슬롯 확장 {g.maxLines >= MAX_LINE_CAP ? '(최대)' : `(${fmt(LINE_SLOT_COST(g.maxLines))}불)`}
             </Btn>
           </div>
         }
@@ -971,7 +971,7 @@ function FactoryTab({ g, priceMult, buyLine, expandLineSlot, setLineRecipe, upgr
               </select>
 
               <div style={{ fontSize: 11, color: C.creamDim, marginBottom: 6 }}>
-                재료: {Object.entries(recipe.ing).map(([k, v]) => `${getIngredientMeta(k).emoji}${v}`).join(' ')} → 판매가 {fmt(recipe.price * priceMult)}냥
+                재료: {Object.entries(recipe.ing).map(([k, v]) => `${getIngredientMeta(k).emoji}${v}`).join(' ')} → 판매가 {fmt(recipe.price * priceMult)}불
               </div>
 
               <ProgressBar pct={line.progress} color={line.blocked ? C.berry : C.pistachio} />
@@ -993,7 +993,7 @@ function FactoryTab({ g, priceMult, buyLine, expandLineSlot, setLineRecipe, upgr
               </select>
 
               <Btn small variant="ghost" onClick={() => upgradeLine(line.id)} style={{ width: '100%', justifyContent: 'center' }}>
-                <Wrench size={13} /> 설비 업그레이드 ({fmt(LEVEL_COST(line.level))}냥)
+                <Wrench size={13} /> 설비 업그레이드 ({fmt(LEVEL_COST(line.level))}불)
               </Btn>
             </Panel>
           );
@@ -1041,7 +1041,7 @@ function ShopTab({ g, priceMult, buyResource, sellProduct }) {
           <Panel key={key} style={{ padding: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 22 }}>{meta.emoji}</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.gold, fontWeight: 700, fontSize: 13 }}>{g.prices[key]}냥/개</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.gold, fontWeight: 700, fontSize: 13 }}>{g.prices[key]}불/개</span>
             </div>
             <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 2 }}>{meta.name}</div>
             <div style={{ fontSize: 11.5, color: C.creamDim, marginBottom: 10 }}>보유량 {fmt(g.resources[key])}개</div>
@@ -1083,7 +1083,7 @@ function ShopTab({ g, priceMult, buyResource, sellProduct }) {
             <Panel key={r.id} style={{ padding: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <span style={{ fontSize: 22 }}>{r.emoji}</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.pistachio, fontWeight: 700, fontSize: 13 }}>{fmt(r.price * priceMult)}냥/개</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.pistachio, fontWeight: 700, fontSize: 13 }}>{fmt(r.price * priceMult)}불/개</span>
               </div>
               <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 2 }}>{r.name}</div>
               <div style={{ fontSize: 11.5, color: C.creamDim, marginBottom: 10 }}>창고 재고 {fmt(qty)}개</div>
@@ -1133,7 +1133,7 @@ function UpgradeTab({ g, discount, buyUpgrade }) {
                     <div style={{ fontSize: 12, color: C.creamDim, margin: '6px 0 12px', lineHeight: 1.5 }}>{u.desc}</div>
                     {!owned && (
                       <Btn small variant={reqMet ? 'primary' : 'ghost'} disabled={!reqMet || g.money < cost} onClick={() => buyUpgrade(u)} style={{ width: '100%', justifyContent: 'center' }}>
-                        {reqMet ? `${fmt(cost)}냥에 연구` : '선행 조건 필요'}
+                        {reqMet ? `${fmt(cost)}불에 연구` : '선행 조건 필요'}
                       </Btn>
                     )}
                     {owned && <div style={{ fontSize: 11.5, color: C.pistachio, fontWeight: 600 }}>완료됨</div>}
@@ -1177,7 +1177,7 @@ function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult }) {
               {key === 'research' && ' 레벨과 무관하게 인원수에 비례해 업그레이드 비용을 깎아줘요(최대 -30%).'}
             </div>
             <Btn small variant="ghost" onClick={() => hireStaff(key)} style={{ width: '100%', justifyContent: 'center' }}>
-              고용하기 ({fmt(STAFF_COST(g.staff.length))}냥)
+              고용하기 ({fmt(STAFF_COST(g.staff.length))}불)
             </Btn>
           </Panel>
         ))}
@@ -1218,7 +1218,7 @@ function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult }) {
                 onClick={() => levelUpStaff(s.id)}
                 style={{ width: '100%', justifyContent: 'center' }}
               >
-                <Gauge size={13} /> {maxed ? '최고 레벨' : `레벨업 (${fmt(cost)}냥)`}
+                <Gauge size={13} /> {maxed ? '최고 레벨' : `레벨업 (${fmt(cost)}불)`}
               </Btn>
             </Panel>
           );
@@ -1353,7 +1353,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino }) {
       <SectionTitle
         eyebrow="Bank"
         title="대출"
-        right={<span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, color: g.debt > 0 ? C.berry : C.creamDim }}>대출 잔액 {fmt(g.debt)}냥 / 한도 {fmt(MAX_DEBT)}냥</span>}
+        right={<span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, color: g.debt > 0 ? C.berry : C.creamDim }}>대출 잔액 {fmt(g.debt)}불 / 한도 {fmt(MAX_DEBT)}불</span>}
       />
       <Panel style={{ padding: 16, marginBottom: 30 }}>
         <div style={{ fontSize: 12, color: C.creamDim, lineHeight: 1.6, marginBottom: 14 }}>
@@ -1363,7 +1363,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
           {LOAN_OPTIONS.map((amt) => (
             <Btn key={amt} variant="ghost" disabled={g.debt + amt > MAX_DEBT} onClick={() => takeLoan(amt)}>
-              <Coins size={14} /> {fmt(amt)}냥 대출
+              <Coins size={14} /> {fmt(amt)}불 대출
             </Btn>
           ))}
         </div>
@@ -1444,15 +1444,15 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino }) {
         )}
         {!spinning && g.casinoLast && (
           <div style={{ textAlign: 'center', marginBottom: 16, fontSize: 13, fontWeight: 700, color: g.casinoLast.outcome === 'lose' ? C.berry : C.pistachio }}>
-            {g.casinoLast.outcome === 'jackpot' && `🎉 트리플 매치! +${fmt(g.casinoLast.payout)}냥`}
-            {g.casinoLast.outcome === 'partial' && `페어! 베팅 절반(${fmt(g.casinoLast.payout)}냥) 회수`}
-            {g.casinoLast.outcome === 'lose' && `꽝... -${fmt(g.casinoLast.bet)}냥`}
+            {g.casinoLast.outcome === 'jackpot' && `🎉 트리플 매치! +${fmt(g.casinoLast.payout)}불`}
+            {g.casinoLast.outcome === 'partial' && `페어! 베팅 절반(${fmt(g.casinoLast.payout)}불) 회수`}
+            {g.casinoLast.outcome === 'lose' && `꽝... -${fmt(g.casinoLast.bet)}불`}
           </div>
         )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
           {CASINO_BETS.map((bet) => (
             <Btn key={bet} variant="gold" disabled={g.money < bet || spinning} onClick={() => runSpin(bet)}>
-              {fmt(bet)}냥 베팅
+              {fmt(bet)}불 베팅
             </Btn>
           ))}
         </div>
@@ -1509,13 +1509,13 @@ function DashboardTab({ g, resetGame }) {
       />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 12, marginBottom: 22 }}>
         {[
-          ['💰', '총 자산', `${fmt(g.money)}냥`],
-          ['📈', '누적 매출', `${fmt(g.totalRevenue)}냥`],
+          ['💰', '총 자산', `${fmt(g.money)}불`],
+          ['📈', '누적 매출', `${fmt(g.totalRevenue)}불`],
           ['📦', '누적 생산량', `${fmt(g.totalProduced)}개`],
           ['👥', '직원 수', `${g.staff.length}명`],
           ['🏭', '생산 라인', `${g.lines.length}개`],
           ['🗃', '창고 재고', `${fmt(whTotal)}개`],
-          ['🏦', '대출 잔액', `${fmt(g.debt)}냥`],
+          ['🏦', '대출 잔액', `${fmt(g.debt)}불`],
         ].map(([icon, label, value]) => (
           <Panel key={label} style={{ padding: 14, textAlign: 'center' }}>
             <div style={{ fontSize: 20 }}>{icon}</div>
@@ -1675,11 +1675,11 @@ function LeaderboardTab({ currentUsername, currentMoney }) {
                     {r.username}{isMe && ' (나)'}
                   </div>
                   <div style={{ fontSize: 10.5, color: C.creamDim }}>
-                    누적 매출 {fmt(Number(r.total_revenue) || 0)}냥 · 생산 {fmt(Number(r.total_produced) || 0)}개
+                    누적 매출 {fmt(Number(r.total_revenue) || 0)}불 · 생산 {fmt(Number(r.total_produced) || 0)}개
                   </div>
                 </div>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: C.gold, fontSize: 14, whiteSpace: 'nowrap' }}>
-                  {fmt(Number(r.money) || 0)}냥
+                  {fmt(Number(r.money) || 0)}불
                 </div>
               </div>
             );
@@ -1689,7 +1689,7 @@ function LeaderboardTab({ currentUsername, currentMoney }) {
 
       {rows !== null && rows.length > 0 && myRank === -1 && (
         <div style={{ fontSize: 11.5, color: C.creamDim, textAlign: 'center' }}>
-          현재 자산 {fmt(currentMoney)}냥으로는 상위 20위 안에 들지 못했어요. 저장 후 다시 확인해보세요!
+          현재 자산 {fmt(currentMoney)}불으로는 상위 20위 안에 들지 못했어요. 저장 후 다시 확인해보세요!
         </div>
       )}
     </div>
