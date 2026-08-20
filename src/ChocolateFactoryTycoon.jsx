@@ -561,27 +561,9 @@ export default function ChocolateFactoryTycoon() {
     });
   };
 
-  const playCasino = (bet) => {
-    if (g.money < bet) { pushToast('자금이 부족해요', 'berry'); return; }
-    const spin = () => {
-      const r = Math.random() * 100;
-      let acc = 0;
-      for (let i = 0; i < SLOT_SYMBOLS.length; i++) {
-        acc += SLOT_WEIGHTS[i];
-        if (r <= acc) return SLOT_SYMBOLS[i];
-      }
-      return SLOT_SYMBOLS[SLOT_SYMBOLS.length - 1];
-    };
-    const reels = [spin(), spin(), spin()];
-    let payout = 0;
-    let outcome = 'lose';
-    if (reels[0] === reels[1] && reels[1] === reels[2]) {
-      payout = Math.round(bet * SLOT_PAYOUTS[reels[0]]);
-      outcome = 'jackpot';
-    } else if (reels[0] === reels[1] || reels[1] === reels[2] || reels[0] === reels[2]) {
-      payout = Math.round(bet * 0.5);
-      outcome = 'partial';
-    }
+  // 스핀 애니메이션(릴이 도는 연출) 자체는 FinanceTab이 로컬로 담당하고,
+  // 애니메이션이 다 끝난 뒤 이 함수로 실제 결과(자금 변동/토스트/업적 카운트)를 반영한다.
+  const resolveCasino = ({ bet, reels, payout, outcome }) => {
     setG((prev) => ({
       ...prev,
       money: prev.money - bet + payout,
@@ -629,6 +611,11 @@ export default function ChocolateFactoryTycoon() {
         @keyframes beltMove { from { background-position: 0 0; } to { background-position: -48px 0; } }
         @keyframes toastIn { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
         @keyframes pulseGlow { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
+        @keyframes slotSpin { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-4px) scale(0.96); } }
+        @keyframes slotLand { 0% { transform: scale(1.35) rotate(-5deg); } 55% { transform: scale(0.88) rotate(3deg); } 100% { transform: scale(1) rotate(0deg); } }
+        @keyframes jackpotGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(234,193,58,0); border-color: ${C.line}; } 50% { box-shadow: 0 0 32px 10px rgba(234,193,58,0.55); border-color: ${C.gold}; } }
+        @keyframes jackpotPop { 0% { transform: translate(-50%,-40%) scale(0.4) rotate(-8deg); opacity: 0; } 55% { transform: translate(-50%,-52%) scale(1.2) rotate(4deg); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1) rotate(0deg); opacity: 1; } }
+        @keyframes confettiBurst { 0% { transform: translate(0,0) rotate(0deg); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; } }
         select { font-family: 'Space Grotesk', sans-serif; }
       `}</style>
 
@@ -721,7 +708,7 @@ export default function ChocolateFactoryTycoon() {
         {tab === 'shop' && <ShopTab g={g} priceMult={displayPriceMult} buyResource={buyResource} sellProduct={sellProduct} />}
         {tab === 'upgrade' && <UpgradeTab g={g} discount={discount} buyUpgrade={buyUpgrade} />}
         {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} levelUpStaff={levelUpStaff} staffRevMult={staffRevMult} />}
-        {tab === 'finance' && <FinanceTab g={g} takeLoan={takeLoan} repayLoan={repayLoan} playCasino={playCasino} />}
+        {tab === 'finance' && <FinanceTab g={g} takeLoan={takeLoan} repayLoan={repayLoan} resolveCasino={resolveCasino} />}
         {tab === 'dashboard' && <DashboardTab g={g} resetGame={resetGame} />}
         {tab === 'achievements' && <AchievementsTab g={g} />}
         {tab === 'leaderboard' && <LeaderboardTab currentUsername={player.username} currentMoney={g.money} />}
@@ -1203,14 +1190,123 @@ function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult }) {
 /* ---------------------------------------------------------------- */
 /*  대출 & 카지노 탭                                                   */
 /* ---------------------------------------------------------------- */
-function FinanceTab({ g, takeLoan, repayLoan, playCasino }) {
+function FinanceTab({ g, takeLoan, repayLoan, resolveCasino }) {
   const [customBet, setCustomBet] = useState('');
+
+  // ---- 슬롯머신 스핀 연출 상태 (실제 자금 반영은 resolveCasino에게 위임) ----
+  const [spinning, setSpinning] = useState(false);
+  const [displayReels, setDisplayReels] = useState(g.casinoLast?.reels || ['❔', '❔', '❔']);
+  const [stoppedMask, setStoppedMask] = useState([true, true, true]);
+  const [landKey, setLandKey] = useState([0, 0, 0]);
+  const [celebrating, setCelebrating] = useState(false);
+  const [confetti, setConfetti] = useState([]);
+  const stoppedRef = useRef([true, true, true]);
+  const timersRef = useRef([]);
+
+  useEffect(() => () => {
+    timersRef.current.forEach((t) => (t.interval ? clearInterval(t.id) : clearTimeout(t.id)));
+  }, []);
+
+  const spinOnce = () => {
+    const r = Math.random() * 100;
+    let acc = 0;
+    for (let i = 0; i < SLOT_SYMBOLS.length; i++) {
+      acc += SLOT_WEIGHTS[i];
+      if (r <= acc) return SLOT_SYMBOLS[i];
+    }
+    return SLOT_SYMBOLS[SLOT_SYMBOLS.length - 1];
+  };
+
+  const makeConfetti = () => {
+    const colors = [C.gold, C.caramelLight, C.berry, C.pistachio, C.cream];
+    return Array.from({ length: 26 }, (_, i) => {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 60 + Math.random() * 110;
+      return {
+        id: `${Date.now()}-${i}`,
+        dx: Math.cos(angle) * dist,
+        dy: Math.sin(angle) * dist - 20,
+        rot: `${Math.round(Math.random() * 720 - 360)}deg`,
+        color: colors[i % colors.length],
+        size: 5 + Math.random() * 5,
+        delay: Math.random() * 0.12,
+      };
+    });
+  };
+
+  const runSpin = (bet) => {
+    if (spinning || g.money < bet) return;
+    timersRef.current.forEach((t) => (t.interval ? clearInterval(t.id) : clearTimeout(t.id)));
+    timersRef.current = [];
+
+    const reels = [spinOnce(), spinOnce(), spinOnce()];
+    let payout = 0;
+    let outcome = 'lose';
+    if (reels[0] === reels[1] && reels[1] === reels[2]) {
+      payout = Math.round(bet * SLOT_PAYOUTS[reels[0]]);
+      outcome = 'jackpot';
+    } else if (reels[0] === reels[1] || reels[1] === reels[2] || reels[0] === reels[2]) {
+      payout = Math.round(bet * 0.5);
+      outcome = 'partial';
+    }
+
+    setSpinning(true);
+    setCelebrating(false);
+    setConfetti([]);
+    stoppedRef.current = [false, false, false];
+    setStoppedMask([false, false, false]);
+
+    // 릴이 빠르게 랜덤 심볼로 도는 연출
+    const cycleId = setInterval(() => {
+      setDisplayReels((prev) => prev.map((s, i) => (stoppedRef.current[i] ? s : SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)])));
+    }, 70);
+    timersRef.current.push({ id: cycleId, interval: true });
+
+    // 왼쪽부터 순서대로 릴을 멈추는 연출 (실제 결과값으로 착지)
+    [550, 900, 1250].forEach((delay, i) => {
+      const tid = setTimeout(() => {
+        stoppedRef.current[i] = true;
+        setDisplayReels((prev) => {
+          const next = [...prev];
+          next[i] = reels[i];
+          return next;
+        });
+        setStoppedMask((prev) => {
+          const next = [...prev];
+          next[i] = true;
+          return next;
+        });
+        setLandKey((prev) => {
+          const next = [...prev];
+          next[i] += 1;
+          return next;
+        });
+        if (i === 2) {
+          clearInterval(cycleId);
+          setSpinning(false);
+          resolveCasino({ bet, reels, payout, outcome });
+          if (outcome === 'jackpot') {
+            setCelebrating(true);
+            setConfetti(makeConfetti());
+            const cleanupId = setTimeout(() => {
+              setCelebrating(false);
+              setConfetti([]);
+            }, 1900);
+            timersRef.current.push({ id: cleanupId, interval: false });
+          }
+        }
+      }, delay);
+      timersRef.current.push({ id: tid, interval: false });
+    });
+  };
+
   const confirmBet = () => {
     const n = Math.floor(Number(customBet));
     if (!n || n <= 0 || n > g.money) return;
-    playCasino(n);
+    runSpin(n);
     setCustomBet('');
   };
+
   return (
     <div>
       <SectionTitle
@@ -1243,14 +1339,69 @@ function FinanceTab({ g, takeLoan, repayLoan, playCasino }) {
 
       <SectionTitle eyebrow="Lucky Belt" title="카지노" />
       <Panel style={{ padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginBottom: 18 }}>
-          {(g.casinoLast?.reels || ['❔', '❔', '❔']).map((s, i) => (
-            <div key={i} style={{ width: 64, height: 64, borderRadius: 12, background: C.bgPanelLighter, border: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>
-              {s}
+        <div
+          style={{
+            position: 'relative',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 14,
+            marginBottom: 18,
+            paddingTop: celebrating ? 26 : 0,
+          }}
+        >
+          {celebrating && (
+            <div
+              style={{
+                position: 'absolute', left: '50%', top: 4, whiteSpace: 'nowrap',
+                fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, color: C.gold,
+                textShadow: '0 0 14px rgba(234,193,58,0.8)', animation: 'jackpotPop .5s ease-out forwards', zIndex: 3,
+              }}
+            >
+              🎉 JACKPOT! 🎉
+            </div>
+          )}
+          {confetti.map((p) => (
+            <div
+              key={p.id}
+              style={{
+                position: 'absolute', left: '50%', top: '55%', width: p.size, height: p.size * 1.6,
+                background: p.color, borderRadius: 2, pointerEvents: 'none', zIndex: 2,
+                animation: `confettiBurst .9s ease-out ${p.delay}s forwards`,
+                '--dx': `${p.dx}px`, '--dy': `${p.dy}px`, '--rot': p.rot,
+              }}
+            />
+          ))}
+          {displayReels.map((s, i) => (
+            <div
+              key={i}
+              style={{
+                width: 64, height: 64, borderRadius: 12, background: C.bgPanelLighter,
+                border: `1px solid ${celebrating ? C.gold : C.line}`, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: 32, overflow: 'hidden',
+                animation: celebrating ? 'jackpotGlow 0.7s ease-in-out infinite' : undefined,
+              }}
+            >
+              <span
+                key={landKey[i]}
+                style={{
+                  display: 'inline-block',
+                  animation:
+                    spinning && !stoppedMask[i]
+                      ? 'slotSpin .16s linear infinite'
+                      : landKey[i] > 0 ? 'slotLand .4s ease' : undefined,
+                }}
+              >
+                {s}
+              </span>
             </div>
           ))}
         </div>
-        {g.casinoLast && (
+        {spinning && (
+          <div style={{ textAlign: 'center', marginBottom: 16, fontSize: 13, fontWeight: 700, color: C.creamDim }}>
+            🎰 스핀 중...
+          </div>
+        )}
+        {!spinning && g.casinoLast && (
           <div style={{ textAlign: 'center', marginBottom: 16, fontSize: 13, fontWeight: 700, color: g.casinoLast.outcome === 'lose' ? C.berry : C.pistachio }}>
             {g.casinoLast.outcome === 'jackpot' && `🎉 트리플 매치! +${fmt(g.casinoLast.payout)}냥`}
             {g.casinoLast.outcome === 'partial' && `페어! 베팅 절반(${fmt(g.casinoLast.payout)}냥) 회수`}
@@ -1259,7 +1410,7 @@ function FinanceTab({ g, takeLoan, repayLoan, playCasino }) {
         )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
           {CASINO_BETS.map((bet) => (
-            <Btn key={bet} variant="gold" disabled={g.money < bet} onClick={() => playCasino(bet)}>
+            <Btn key={bet} variant="gold" disabled={g.money < bet || spinning} onClick={() => runSpin(bet)}>
               {fmt(bet)}냥 베팅
             </Btn>
           ))}
@@ -1272,9 +1423,10 @@ function FinanceTab({ g, takeLoan, repayLoan, playCasino }) {
             value={customBet}
             onChange={(e) => setCustomBet(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && confirmBet()}
+            disabled={spinning}
             style={{ width: 160, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 12.5 }}
           />
-          <Btn variant="primary" disabled={!customBet || Number(customBet) <= 0 || Number(customBet) > g.money} onClick={confirmBet}>
+          <Btn variant="primary" disabled={spinning || !customBet || Number(customBet) <= 0 || Number(customBet) > g.money} onClick={confirmBet}>
             직접 베팅
           </Btn>
         </div>
