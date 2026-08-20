@@ -47,22 +47,22 @@ const getIngredientMeta = (key) => {
 // tier 1: 원재료로 바로 만드는 기본 초콜릿 3종
 // tier 2: 기본 초콜릿(창고 재고)을 "재료"로 소모해 만드는 상위 테크 2종
 const RECIPES = [
-  { id: 'dark', name: '다크 초콜릿', emoji: '🍫', tier: 1, ing: { cacao: 3, sugar: 1 }, price: 15 },
-  { id: 'milk', name: '밀크 초콜릿', emoji: '🍬', tier: 1, ing: { cacao: 2, sugar: 1, freshMilk: 2 }, price: 13 },
-  { id: 'white', name: '화이트 초콜릿', emoji: '🤍', tier: 1, ing: { sugar: 2, freshMilk: 3 }, price: 14 },
-  { id: 'strawberry', name: '딸기 초콜릿', emoji: '🍓', tier: 2, ing: { milk: 1, strawberry: 2 }, price: 34 },
-  { id: 'blueberry', name: '블루베리 초콜릿', emoji: '🫐', tier: 2, ing: { white: 1, blueberry: 2 }, price: 36 },
+  { id: 'dark', name: '다크 초콜릿', emoji: '🍫', tier: 1, ing: { cacao: 3, sugar: 1 }, price: 22 },
+  { id: 'milk', name: '밀크 초콜릿', emoji: '🍬', tier: 1, ing: { cacao: 2, sugar: 1, freshMilk: 2 }, price: 24 },
+  { id: 'white', name: '화이트 초콜릿', emoji: '🤍', tier: 1, ing: { sugar: 2, freshMilk: 3 }, price: 20 },
+  { id: 'strawberry', name: '딸기 초콜릿', emoji: '🍓', tier: 2, ing: { milk: 1, strawberry: 2 }, price: 58 },
+  { id: 'blueberry', name: '블루베리 초콜릿', emoji: '🫐', tier: 2, ing: { white: 1, blueberry: 2 }, price: 54 },
 ];
 
 const UPGRADES = [
-  { id: 'u1', tier: 1, req: null, name: '로스터 개선', desc: '모든 생산 라인 속도 +15%', cost: 220, effect: { speed: 0.15 } },
-  { id: 'u2', tier: 1, req: null, name: '창고 확장 I', desc: '창고 용량 +100', cost: 160, effect: { warehouse: 100 } },
-  { id: 'u3', tier: 2, req: 'u1', name: '컨칭 자동화', desc: '모든 생산 라인 속도 +20%', cost: 550, effect: { speed: 0.20 } },
-  { id: 'u4', tier: 2, req: 'u2', name: '딸기 조달 계약', desc: '딸기 초콜릿(2단계 테크)을 생산할 수 있습니다. 밀크 초콜릿 재고를 재료로 소모해요.', cost: 450, effect: { unlock: 'strawberry' } },
-  { id: 'u5', tier: 3, req: 'u4', name: '블루베리 조달 계약', desc: '블루베리 초콜릿(2단계 테크)을 생산할 수 있습니다. 화이트 초콜릿 재고를 재료로 소모해요.', cost: 900, effect: { unlock: 'blueberry' } },
-  { id: 'u6', tier: 3, req: 'u3', name: '창고 확장 II', desc: '창고 용량 +250', cost: 700, effect: { warehouse: 250 } },
-  { id: 'u7', tier: 4, req: 'u5', name: '프리미엄 브랜딩', desc: '모든 판매가 +25%', cost: 1600, effect: { priceMult: 0.25 } },
-  { id: 'u8', tier: 4, req: 'u6', name: '원재료 절감 공정', desc: '원재료 소모량 -20% (기본 초콜릿 3종에만 적용)', cost: 1300, effect: { ingSave: 0.20 } },
+  { id: 'u1', tier: 1, req: null, name: '로스터 개선', desc: '모든 생산 라인 속도 +15%', cost: 140, effect: { speed: 0.15 } },
+  { id: 'u2', tier: 1, req: null, name: '창고 확장 I', desc: '창고 용량 +100', cost: 100, effect: { warehouse: 100 } },
+  { id: 'u3', tier: 2, req: 'u1', name: '컨칭 자동화', desc: '모든 생산 라인 속도 +20%', cost: 320, effect: { speed: 0.20 } },
+  { id: 'u4', tier: 2, req: 'u2', name: '딸기 조달 계약', desc: '딸기 초콜릿(2단계 테크)을 생산할 수 있습니다. 밀크 초콜릿 재고를 재료로 소모해요.', cost: 260, effect: { unlock: 'strawberry' } },
+  { id: 'u5', tier: 3, req: 'u4', name: '블루베리 조달 계약', desc: '블루베리 초콜릿(2단계 테크)을 생산할 수 있습니다. 화이트 초콜릿 재고를 재료로 소모해요.', cost: 500, effect: { unlock: 'blueberry' } },
+  { id: 'u6', tier: 3, req: 'u3', name: '창고 확장 II', desc: '창고 용량 +250', cost: 400, effect: { warehouse: 250 } },
+  { id: 'u7', tier: 4, req: 'u5', name: '프리미엄 브랜딩', desc: '모든 판매가 +25%', cost: 850, effect: { priceMult: 0.25 } },
+  { id: 'u8', tier: 4, req: 'u6', name: '원재료 절감 공정', desc: '원재료 소모량 -20% (기본 초콜릿 3종에만 적용)', cost: 700, effect: { ingSave: 0.20 } },
 ];
 
 const STAFF_FIRST = ['민준', '서연', '도윤', '하은', '시우', '지아', '예준', '수아', '주원', '다은', '이안', '해나'];
@@ -75,16 +75,16 @@ const ACHIEVEMENTS = [
   { id: 'a1', name: '첫 생산', cond: (g) => g.totalProduced >= 1 },
   { id: 'a2', name: '첫 매출', cond: (g) => g.totalRevenue >= 1 },
   { id: 'a3', name: '자산 1,000냥', cond: (g) => g.money >= 1000 },
-  { id: 'a4', name: '자산 10,000냥', cond: (g) => g.money >= 10000 },
+  { id: 'a4', name: '자산 5,000냥', cond: (g) => g.money >= 5000 },
   { id: 'a5', name: '생산 라인 3개', cond: (g) => g.lines.length >= 3 },
-  { id: 'a6', name: '직원 5명 고용', cond: (g) => g.staff.length >= 5 },
-  { id: 'a7', name: '업그레이드 5개', cond: (g) => g.upgrades.length >= 5 },
-  { id: 'a8', name: '누적 생산 500개', cond: (g) => g.totalProduced >= 500 },
+  { id: 'a6', name: '직원 3명 고용', cond: (g) => g.staff.length >= 3 },
+  { id: 'a7', name: '업그레이드 4개', cond: (g) => g.upgrades.length >= 4 },
+  { id: 'a8', name: '누적 생산 100개', cond: (g) => g.totalProduced >= 100 },
 ];
 
-const LINE_COST = (n) => 300 + n * 350;
-const LEVEL_COST = (lvl) => 80 + lvl * 90;
-const STAFF_COST = (n) => 120 + n * 95;
+const LINE_COST = (n) => 180 + n * 220;
+const LEVEL_COST = (lvl) => 50 + lvl * 55;
+const STAFF_COST = (n) => 80 + n * 60;
 
 const fmt = (n) => Math.floor(n).toLocaleString('ko-KR');
 
@@ -93,17 +93,17 @@ const fmt = (n) => Math.floor(n).toLocaleString('ko-KR');
 /* ---------------------------------------------------------------- */
 const initialGame = () => ({
   started: false,
-  money: 300,
-  resources: { cacao: 60, sugar: 60, freshMilk: 40, strawberry: 0, blueberry: 0 },
-  prices: { cacao: 5, sugar: 2, freshMilk: 3, strawberry: 6, blueberry: 7 },
+  money: 500,
+  resources: { cacao: 100, sugar: 100, freshMilk: 80, strawberry: 0, blueberry: 0 },
+  prices: { cacao: 3, sugar: 1, freshMilk: 2, strawberry: 4, blueberry: 4 },
   warehouse: {},
-  warehouseCap: 150,
+  warehouseCap: 220,
   lines: [{ id: 1, recipeId: 'dark', level: 1, progress: 0, staffId: null, blocked: false }],
   maxLines: 4,
   staff: [],
   upgrades: [],
   unlockedRecipes: ['dark', 'milk', 'white'],
-  history: [{ t: 0, money: 300 }],
+  history: [{ t: 0, money: 500 }],
   achievements: [],
   totalRevenue: 0,
   totalProduced: 0,
@@ -230,7 +230,7 @@ export default function ChocolateFactoryTycoon() {
           if (!recipe) return line;
           const staffMember = prev.staff.find((s) => s.id === line.staffId);
           const staffBoost = staffMember ? staffMember.level * 9 : 0;
-          const speed = (9 + line.level * 3.5) * (1 + speedBonus) + staffBoost;
+          const speed = (20 + line.level * 6) * (1 + speedBonus) + staffBoost;
           let progress = line.progress + speed;
           let blocked = false;
 
