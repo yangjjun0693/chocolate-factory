@@ -1806,6 +1806,7 @@ function AdminPage({ onClose }) {
   }, []);
 
   const supabaseAdminRpc = useCallback(async (fn, body) => {
+    console.log('[Admin RPC]', fn, body);
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
       method: 'POST',
       headers: {
@@ -1816,9 +1817,10 @@ function AdminPage({ onClose }) {
       body: JSON.stringify(body),
     });
     let json = null;
-    try { json = await res.json(); } catch (e) { /* void */ }
+    try { json = await res.json(); } catch (e) { console.warn('[Admin RPC] No JSON response', e); }
+    console.log('[Admin RPC Response]', fn, { status: res.ok, statusCode: res.status, json });
     if (!res.ok) {
-      const msg = (json && (json.message || json.error_description || json.hint)) || '요청이 실패했어요';
+      const msg = (json && (json.message || json.error_description || json.hint || json.code)) || `HTTP ${res.status}: 요청이 실패했어요`;
       throw new Error(msg);
     }
     return json;
@@ -2054,7 +2056,7 @@ function AdminPage({ onClose }) {
             <StatsTab stats={stats} players={players} />
           )}
           {activeTab === 'database' && (
-            <DatabaseTab onExport={exportData} loading={loading} />
+            <DatabaseTab onExport={exportData} loading={loading} supabaseAdminRpc={supabaseAdminRpc} />
           )}
         </div>
 
@@ -2529,7 +2531,22 @@ function StatsTab({ stats, players }) {
 /* ---------------------------------------------------------------- */
 /*  데이터베이스 탭                                                    */
 /* ---------------------------------------------------------------- */
-function DatabaseTab({ onExport, loading }) {
+function DatabaseTab({ onExport, loading, supabaseAdminRpc }) {
+  const [testResults, setTestResults] = useState([]);
+  const [testLoading, setTestLoading] = useState(false);
+
+  const runTest = async (fn, body = {}) => {
+    setTestLoading(true);
+    try {
+      const result = await supabaseAdminRpc(fn, body);
+      setTestResults(prev => [...prev, { fn, body, result, success: true, time: new Date().toLocaleTimeString() }]);
+    } catch (err) {
+      setTestResults(prev => [...prev, { fn, body, error: err.message, success: false, time: new Date().toLocaleTimeString() }]);
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
   return (
     <div>
       <SectionTitle eyebrow="Database Tools" title="데이터베이스 관리" />
@@ -2540,6 +2557,43 @@ function DatabaseTab({ onExport, loading }) {
         <Btn variant="gold" onClick={onExport} disabled={loading} style={{ width: '100%', justifyContent: 'center' }}>
           <Download size={14} /> 전체 데이터 내보내기 (JSON)
         </Btn>
+      </Panel>
+
+      <Panel style={{ padding: 16, marginBottom: 16, border: `1px solid ${C.caramelLight}`, background: '#3B2A1A' }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.caramelLight, fontSize: 15, marginBottom: 12 }}>🔧 RPC 함수 테스트 (디버그)</div>
+        <div style={{ fontSize: 11, color: C.creamDim, marginBottom: 12 }}>Supabase에 관리자 함수가 생성되었는지 테스트합니다.</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <Btn variant="gold" small onClick={() => runTest('admin_get_players', { p_limit: 5 })} disabled={testLoading}>get_players 테스트</Btn>
+          <Btn variant="gold" small onClick={() => runTest('admin_get_stats', {})} disabled={testLoading}>get_stats 테스트</Btn>
+          <Btn variant="ghost" small onClick={() => runTest('admin_get_player_detail', { p_player_id: '00000000-0000-0000-0000-000000000000' })} disabled={testLoading}>get_player_detail 테스트</Btn>
+          <Btn variant="ghost" small onClick={() => runTest('admin_adjust_money', { p_player_id: '00000000-0000-0000-0000-000000000000', p_amount: 100 })} disabled={testLoading}>adjust_money 테스트</Btn>
+          <Btn variant="ghost" small onClick={() => runTest('admin_toggle_ads', { p_player_id: '00000000-0000-0000-0000-000000000000', p_enabled: false })} disabled={testLoading}>toggle_ads 테스트</Btn>
+          <Btn variant="ghost" small onClick={() => runTest('admin_set_config', { p_key: 'test_key', p_value: 'test_value' })} disabled={testLoading}>set_config 테스트</Btn>
+          <Btn variant="ghost" small onClick={() => runTest('admin_set_jackpot_rate', { p_rate: 5 })} disabled={testLoading}>set_jackpot_rate 테스트</Btn>
+          <Btn variant="ghost" small onClick={() => runTest('admin_export_all_data', {})} disabled={testLoading}>export_all_data 테스트</Btn>
+        </div>
+        {testResults.length > 0 && (
+          <div style={{ maxHeight: 300, overflow: 'auto', background: C.bgDeep, borderRadius: 8, padding: 12, border: `1px solid ${C.line}` }}>
+            {testResults.slice().reverse().map((r, i) => (
+              <div key={i} style={{ marginBottom: 8, padding: 8, background: r.success ? '#1A3A1A' : '#3A1A1A', borderRadius: 6, border: `1px solid ${r.success ? C.pistachio : C.berry}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", color: r.success ? C.pistachio : C.berry, fontWeight: 700 }}>
+                    {r.success ? '✓' : '✗'} {r.fn}
+                  </span>
+                  <span style={{ color: C.creamDim }}>{r.time}</span>
+                </div>
+                <div style={{ fontSize: 10, color: C.creamDim, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {r.success ? JSON.stringify(r.result).slice(0, 500) : r.error}
+                </div>
+                {r.body && Object.keys(r.body).length > 0 && (
+                  <div style={{ fontSize: 9, color: C.caramelLight, marginTop: 4, fontFamily: "'JetBrains Mono', monospace" }}>
+                    입력: {JSON.stringify(r.body)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </Panel>
 
       <Panel style={{ padding: 16, marginBottom: 16, border: `1px solid ${C.berry}`, background: '#3B1A1A' }}>
