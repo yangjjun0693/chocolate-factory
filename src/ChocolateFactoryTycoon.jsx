@@ -1382,22 +1382,17 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
   // Dynamic slot weights based on jackpotRate (%)
   // Target: sum of (weight/100)^3 for all symbols = jackpotRate/100
   const getSlotWeights = useCallback((rate) => {
-    const baseWeights = [30, 25, 20, 12, 10]; // 🍫 🍬 🤍 🍓 🫐
-    const baseSum = baseWeights.reduce((a, b) => a + b, 0); // 97
-    // Remaining weight for 💎 (diamond) to hit target jackpot rate
+    // Base relative weights (sum = 100 for 100% probability)
+    const baseWeights = [30, 25, 20, 12, 10, 3]; // 🍫 🍬 🤍 🍓 🫐 💎
+    // Current triple probability with base weights
+    const currentTripleProb = baseWeights.reduce((sum, w) => sum + Math.pow(w / 100, 3), 0);
     const targetRate = rate / 100; // e.g., 3% -> 0.03
-    const baseTripleProb = baseWeights.reduce((sum, w) => sum + Math.pow(w / 100, 3), 0);
-    let diamondWeight = 3; // default
-    // Solve for diamond weight: baseTripleProb + (diamondWeight/100)^3 = targetRate
-    const needed = targetRate - baseTripleProb;
-    if (needed > 0) {
-      diamondWeight = Math.min(50, Math.max(1, Math.round(Math.pow(needed * 1000000, 1/3))));
-    } else {
-      // If target is lower than base, scale all weights down
-      const scale = Math.pow(targetRate / baseTripleProb, 1/3);
-      diamondWeight = Math.max(1, Math.round(3 * scale));
-    }
-    return [...baseWeights, diamondWeight];
+    
+    // Scale all weights proportionally to hit target triple probability
+    // (k*w/100)^3 = k^3 * (w/100)^3, so sum = k^3 * currentTripleProb = targetRate
+    // k = (targetRate / currentTripleProb)^(1/3)
+    const scale = Math.pow(targetRate / currentTripleProb, 1/3);
+    return baseWeights.map(w => Math.max(1, Math.round(w * scale)));
   }, []);
 
   const slotWeights = getSlotWeights(jackpotRate);
