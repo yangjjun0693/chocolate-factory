@@ -36,7 +36,7 @@ const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Fraun
 /* ---------------------------------------------------------------- */
 const AD_BANNERS = {
   left: { src: 'https://i.imgur.com/lghIHV2.png', href: 'https://kasaneteto.jp/', alt: 'https://i.imgur.com/lghIHV2.png' },
-  right: { src: 'https://i.imgur.com/xfa4mYF.png', href: '/돈줘.html', alt: 'https://i.imgur.com/xfa4mYF.png' },
+  right: { src: 'https://i.imgur.com/xfa4mYF.png', href: 'https://tabbarr.pages.dev/돈줘.html', alt: 'https://i.imgur.com/xfa4mYF.png' },
 };
 
 /* ---------------------------------------------------------------- */
