@@ -412,18 +412,51 @@ export default function ChocolateFactoryTycoon() {
           },
           body: JSON.stringify({}),
         });
+        console.log('[Config Fetch] status:', res.status);
         if (res.ok) {
           const data = await res.json();
+          console.log('[Config Fetch] data:', data);
           if (data && data.slotJackpotBaseRate) {
             setJackpotRate(Number(data.slotJackpotBaseRate));
+            console.log('[Config] Jackpot rate set to:', data.slotJackpotBaseRate);
           }
+        } else {
+          const err = await res.json();
+          console.warn('[Config Fetch] error:', err);
         }
       } catch (e) {
-        console.warn('Config fetch failed:', e);
+        console.warn('[Config Fetch] exception:', e);
       }
     };
     fetchConfig();
   }, []);
+
+  // Expose refresh for admin
+  window.__refreshJackpotConfig = () => {
+    const fetchConfig = async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_get_config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({}),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.slotJackpotBaseRate) {
+            setJackpotRate(Number(data.slotJackpotBaseRate));
+            console.log('[Config] Refreshed jackpot rate:', data.slotJackpotBaseRate);
+          }
+        }
+      } catch (e) {
+        console.warn('[Config Refresh] failed:', e);
+      }
+    };
+    fetchConfig();
+  };
 
   // ---- 로그인 상태 & 저장 ----
   const [player, setPlayer] = useState(null); // { id, username, password }
@@ -1368,6 +1401,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
   }, []);
 
   const slotWeights = getSlotWeights(jackpotRate);
+  console.log('[Casino] Jackpot rate:', jackpotRate, 'Weights:', slotWeights, 'Triple prob:', slotWeights.reduce((s,w)=>s+Math.pow(w/100,3),0)*100 + '%');
   const slotSymbols = ['🍫', '🍬', '🤍', '🍓', '🫐', '💎'];
   const slotPayouts = { '🍫': 2, '🍬': 2.5, '🤍': 3, '🍓': 5, '🫐': 6, '💎': 20 };
 
@@ -1515,7 +1549,18 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
         </div>
       </Panel>
 
-      <SectionTitle eyebrow="Lucky Belt" title="카지노" />
+      <SectionTitle 
+        eyebrow="Lucky Belt" 
+        title="카지노" 
+        right={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: C.caramelLight }}>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>잭팟: {jackpotRate}%</span>
+            <Btn variant="ghost" small onClick={() => window.__refreshJackpotConfig?.()}>
+              <RotateCcw size={12} /> 새로고침
+            </Btn>
+          </div>
+        }
+      />
       <Panel style={{ padding: 20 }}>
         <div
           style={{
