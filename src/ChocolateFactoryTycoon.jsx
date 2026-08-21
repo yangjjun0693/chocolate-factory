@@ -3,7 +3,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import {
   Factory, Warehouse, ShoppingCart, TrendingUp, Users, LayoutDashboard,
   Lock, Check, Plus, ChevronRight, Sparkles, Coins, Package, Wrench,
-  UserPlus, Gauge, Award, ArrowUpCircle, X
+  UserPlus, Gauge, Award, ArrowUpCircle, X, Shield, Trash2, Edit, Eye,
+  Database, Activity, Server, Key, Ban, RotateCcw, Download, Upload
 } from 'lucide-react';
 
 /* ---------------------------------------------------------------- */
@@ -379,7 +380,23 @@ function AdBanner({ src, href, alt }) {
 export default function ChocolateFactoryTycoon() {
   const [g, setG] = useState(initialGame());
   const [tab, setTab] = useState('factory');
+  const [showAdmin, setShowAdmin] = useState(false);
   const toastTimer = useRef(null);
+
+  // Admin page toggle with Ctrl+Shift+A
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        setShowAdmin((prev) => !prev);
+      }
+      if (e.key === 'Escape' && showAdmin) {
+        setShowAdmin(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showAdmin]);
 
   // ---- 로그인 상태 & 저장 ----
   const [player, setPlayer] = useState(null); // { id, username, password }
@@ -696,6 +713,11 @@ export default function ChocolateFactoryTycoon() {
     { id: 'achievements', label: '도전과제', icon: Award },
     { id: 'leaderboard', label: '랭킹', icon: TrendingUp },
   ];
+
+  // Admin page overlay
+  if (showAdmin) {
+    return <AdminPage onClose={() => setShowAdmin(false)} />;
+  }
 
   return (
     <div style={{ minHeight: 640, background: C.bgDeep, display: 'flex', justifyContent: 'center', gap: 16, padding: '20px 16px' }}>
@@ -1750,11 +1772,537 @@ function LeaderboardTab({ currentUsername, currentMoney }) {
         </Panel>
       )}
 
-      {rows !== null && rows.length > 0 && myRank === -1 && (
+{rows !== null && rows.length > 0 && myRank === -1 && (
         <div style={{ fontSize: 11.5, color: C.creamDim, textAlign: 'center' }}>
-          현재 자산 {fmt(currentMoney)}불으로는 상위 20위 안에 들지 못했어요. 저장 후 다시 확인해보세요!
+          현재 자산 {fmt(currentMoney)}불로는 상위 20위 안에 들지 못했어요. 저장 후 다시 확인해보세요!
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  관리자 페이지                                                     */
+/* ---------------------------------------------------------------- */
+const ADMIN_PASSWORD = '1234';
+
+function AdminPage({ onClose }) {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [players, setPlayers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [playerDetail, setPlayerDetail] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [activeTab, setActiveTab] = useState('players');
+
+  const supabaseAdminRpc = useCallback(async (fn, body) => {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify(body),
+    });
+    let json = null;
+    try { json = await res.json(); } catch (e) { /* void */ }
+    if (!res.ok) {
+      const msg = (json && (json.message || json.error_description || json.hint)) || '요청이 실패했어요';
+      throw new Error(msg);
+    }
+    return json;
+  }, []);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (password === ADMIN_PASSWORD) {
+      setAuthenticated(true);
+      loadPlayers();
+      loadStats();
+    } else {
+      setError('비밀번호가 틀렸어요');
+    }
+  };
+
+  const loadPlayers = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await supabaseAdminRpc('admin_get_players', { p_limit: 100 });
+      setPlayers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || '플레이어 목록을 불러오지 못했어요');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const data = await supabaseAdminRpc('admin_get_stats', {});
+      setStats(data);
+    } catch (err) {
+      console.error('Stats load failed:', err);
+    }
+  };
+
+  const loadPlayerDetail = async (playerId) => {
+    try {
+      const data = await supabaseAdminRpc('admin_get_player_detail', { p_player_id: playerId });
+      setPlayerDetail(data);
+    } catch (err) {
+      setError(err.message || '플레이어 상세 정보를 불러오지 못했어요');
+    }
+  };
+
+  const handlePlayerAction = async (playerId, action) => {
+    if (!window.confirm(`정말로 ${action === 'reset' ? '초기화' : '차단'}하시겠어요?`)) return;
+    try {
+      await supabaseAdminRpc('admin_player_action', { p_player_id: playerId, p_action: action });
+      loadPlayers();
+      if (selectedPlayer?.id === playerId) {
+        setSelectedPlayer(null);
+        setPlayerDetail(null);
+      }
+    } catch (err) {
+      setError(err.message || '작업에 실패했어요');
+    }
+  };
+
+  const exportData = async () => {
+    try {
+      const data = await supabaseAdminRpc('admin_export_all_data', {});
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `chocolate-factory-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || '내보내기 실패');
+    }
+  };
+
+  if (!authenticated) {
+    return (
+      <div style={{ minHeight: 640, background: `radial-gradient(circle at 30% 20%, #3B2716 0%, ${C.bgDeep} 60%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk', sans-serif", padding: 24 }}>
+        <style>{FONT_IMPORT}</style>
+        <Panel style={{ width: '100%', maxWidth: 380, padding: 28 }}>
+          <div style={{ textAlign: 'center', marginBottom: 22 }}>
+            <div style={{ fontSize: 32, marginBottom: 6 }}>🛡️</div>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, color: C.cream }}>관리자 로그인</div>
+            <div style={{ fontSize: 11, color: C.creamDim, letterSpacing: 1, marginTop: 2 }}>관리자 비밀번호를 입력하세요</div>
+          </div>
+          <form onSubmit={handleLogin}>
+            <input
+              type="password"
+              placeholder="관리자 비밀번호"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{ width: '100%', background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 9, padding: '10px 12px', fontSize: 14, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 12, outline: 'none' }}
+              autoComplete="current-password"
+            />
+            {error && <div style={{ color: C.berry, fontSize: 12, margin: '6px 0 10px' }}>⚠ {error}</div>}
+            <Btn variant="gold" disabled={!password} style={{ width: '100%', justifyContent: 'center', marginTop: 12 }} type="submit">
+              로그인
+            </Btn>
+          </form>
+          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12.5, color: C.creamDim }}>
+            <Btn variant="ghost" small onClick={onClose}><ChevronRight size={14} /> 게임으로 돌아가기</Btn>
+          </div>
+        </Panel>
+      </div>
+    );
+  }
+
+  const fmt = (n) => Math.floor(n).toLocaleString('ko-KR');
+
+  return (
+    <div style={{ minHeight: 640, background: C.bgDeep, display: 'flex', justifyContent: 'center', gap: 16, padding: '20px 16px' }}>
+      <style>{`
+        ${FONT_IMPORT}
+        * { box-sizing: border-box; }
+        ::-webkit-scrollbar { height: 6px; width: 6px; }
+        ::-webkit-scrollbar-thumb { background: ${C.bgPanelLighter}; border-radius: 4px; }
+      `}</style>
+
+      <div style={{ width: '100%', maxWidth: 1200, minHeight: 640, background: C.bgDeep, fontFamily: "'Space Grotesk', sans-serif", position: 'relative', paddingBottom: 24 }}>
+        {/* 헤더 */}
+        <div style={{ padding: '18px 22px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: `linear-gradient(135deg, ${C.berry}, #E39A3A)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🛡️</div>
+              <div>
+                <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 19, color: C.cream, letterSpacing: 0.3 }}>관리자 패널</div>
+                <div style={{ fontSize: 10.5, color: C.creamDim, letterSpacing: 0.6 }}>CHOCOLATE FACTORY TYCOON</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn variant="ghost" small onClick={onClose}><ChevronRight size={14} /> 게임으로</Btn>
+              <Btn variant="danger" small onClick={() => setAuthenticated(false)}><Lock size={14} /> 로그아웃</Btn>
+            </div>
+          </div>
+        </div>
+
+        {/* 탭 네비게이션 */}
+        <div style={{ padding: '16px 22px 0', display: 'flex', gap: 6, borderBottom: `1px solid ${C.line}`, overflowX: 'auto' }}>
+          {[
+            { id: 'players', label: '플레이어 관리', icon: Users },
+            { id: 'stats', label: '통계', icon: Activity },
+            { id: 'database', label: '데이터베이스', icon: Database },
+          ].map((t) => {
+            const Icon = t.icon;
+            const active = activeTab === t.id;
+            return (
+              <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', background: 'none', border: 'none', borderBottom: active ? `2px solid ${C.berry}` : '2px solid transparent', color: active ? C.cream : C.creamDim, cursor: 'pointer', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}>
+                <Icon size={15} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 컨텐츠 */}
+        <div style={{ padding: '20px 22px 0' }}>
+          {activeTab === 'players' && (
+            <PlayerManagementTab
+              players={players}
+              loading={loading}
+              error={error}
+              selectedPlayer={selectedPlayer}
+              playerDetail={playerDetail}
+              onSelectPlayer={setSelectedPlayer}
+              onLoadDetail={loadPlayerDetail}
+              onPlayerAction={handlePlayerAction}
+              onRefresh={loadPlayers}
+            />
+          )}
+          {activeTab === 'stats' && (
+            <StatsTab stats={stats} players={players} />
+          )}
+          {activeTab === 'database' && (
+            <DatabaseTab onExport={exportData} loading={loading} />
+          )}
+        </div>
+
+        {selectedPlayer && playerDetail && (
+          <PlayerDetailModal
+            player={playerDetail}
+            onClose={() => { setSelectedPlayer(null); setPlayerDetail(null); }}
+            onAction={(action) => handlePlayerAction(selectedPlayer.id, action)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  플레이어 관리 탭                                                   */
+/* ---------------------------------------------------------------- */
+function PlayerManagementTab({ players, loading, error, selectedPlayer, playerDetail, onSelectPlayer, onLoadDetail, onPlayerAction, onRefresh }) {
+  return (
+    <div>
+      <SectionTitle
+        eyebrow="Player Management"
+        title="플레이어 목록"
+        right={
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {loading && <span style={{ fontSize: 12, color: C.caramelLight }}>로딩 중...</span>}
+            <Btn variant="ghost" small onClick={onRefresh} disabled={loading}><RotateCcw size={14} /> 새로고침</Btn>
+          </div>
+        }
+      />
+
+      {error && <Panel style={{ padding: 12, marginBottom: 16, border: `1px solid ${C.berry}`, background: '#3B1A1A' }}><div style={{ color: C.berry, fontSize: 13, fontWeight: 600 }}>⚠ {error}</div></Panel>}
+
+      {players.length === 0 && !loading && (
+        <Panel style={{ padding: 24, textAlign: 'center', color: C.creamDim, fontSize: 13 }}>등록된 플레이어가 없습니다.</Panel>
+      )}
+
+      {players.length > 0 && (
+        <Panel style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 120px 100px 100px 100px 120px', gap: 12, padding: '12px 16px', fontSize: 11, fontWeight: 700, color: C.creamDim, background: C.bgPanelLight, borderBottom: `1px solid ${C.line}`, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <div>#</div>
+            <div>사용자명</div>
+            <div>자산</div>
+            <div>누적매출</div>
+            <div>누적생산</div>
+            <div>최근접속</div>
+            <div>액션</div>
+          </div>
+          {players.map((p, i) => {
+            const isSelected = selectedPlayer?.id === p.id;
+            return (
+              <div key={p.id} onClick={() => { onSelectPlayer(p); onLoadDetail(p.id); }} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 120px 100px 100px 100px 120px', gap: 12, padding: '10px 16px', alignItems: 'center', borderBottom: `1px solid ${C.line}`, background: isSelected ? C.bgPanelLighter : 'transparent', cursor: 'pointer', transition: 'background .1s' }}>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: C.creamDim }}>{i + 1}</div>
+                <div style={{ fontWeight: 600, color: C.cream, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.username}</div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", color: C.gold, fontWeight: 700 }}>{fmt(Number(p.money) || 0)}불</div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: C.creamDim }}>{fmt(Number(p.total_revenue) || 0)}불</div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: C.creamDim }}>{fmt(Number(p.total_produced) || 0)}개</div>
+                <div style={{ fontSize: 11, color: C.creamDim }}>{p.last_saved ? new Date(p.last_saved).toLocaleDateString('ko-KR') : '없음'}</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <Btn variant="ghost" small onClick={(e) => { e.stopPropagation(); onPlayerAction(p.id, 'reset'); }}><RotateCcw size={12} /> 초기화</Btn>
+                  <Btn variant="danger" small onClick={(e) => { e.stopPropagation(); onPlayerAction(p.id, 'ban'); }}><Ban size={12} /> 차단</Btn>
+                </div>
+              </div>
+            );
+          })}
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  통계 탭                                                           */
+/* ---------------------------------------------------------------- */
+function StatsTab({ stats, players }) {
+  const totalPlayers = players.length;
+  const totalMoney = players.reduce((sum, p) => sum + (Number(p.money) || 0), 0);
+  const totalRevenue = players.reduce((sum, p) => sum + (Number(p.total_revenue) || 0), 0);
+  const totalProduced = players.reduce((sum, p) => sum + (Number(p.total_produced) || 0), 0);
+  const avgMoney = totalPlayers > 0 ? Math.round(totalMoney / totalPlayers) : 0;
+
+  return (
+    <div>
+      <SectionTitle eyebrow="Overview" title="게임 통계" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))', gap: 12, marginBottom: 22 }}>
+        {[
+          ['👥', '전체 플레이어', totalPlayers],
+          ['💰', '전체 자산 합계', `${fmt(totalMoney)}불`],
+          ['📈', '전체 누적 매출', `${fmt(totalRevenue)}불`],
+          ['📦', '전체 누적 생산', `${fmt(totalProduced)}개`],
+          ['📊', '플레이어당 평균 자산', `${fmt(avgMoney)}불`],
+          ['🏆', '최고 자산', players.length ? `${fmt(Math.max(...players.map(p => Number(p.money) || 0)))}불` : '0불'],
+        ].map(([icon, label, value]) => (
+          <Panel key={label} style={{ padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 24 }}>{icon}</div>
+            <div style={{ fontSize: 11, color: C.creamDim, margin: '6px 0 2px' }}>{label}</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: C.gold, fontSize: 18 }}>{value}</div>
+          </Panel>
+        ))}
+      </div>
+
+      <Panel style={{ padding: 16 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>플레이어 자산 분포</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px,1fr))', gap: 10 }}>
+          {[
+            { label: '0 ~ 1,000', count: players.filter(p => (Number(p.money) || 0) < 1000).length },
+            { label: '1,000 ~ 10,000', count: players.filter(p => { const m = Number(p.money) || 0; return m >= 1000 && m < 10000; }).length },
+            { label: '10,000 ~ 50,000', count: players.filter(p => { const m = Number(p.money) || 0; return m >= 10000 && m < 50000; }).length },
+            { label: '50,000 ~ 100,000', count: players.filter(p => { const m = Number(p.money) || 0; return m >= 50000 && m < 100000; }).length },
+            { label: '100,000+', count: players.filter(p => (Number(p.money) || 0) >= 100000).length },
+          ].map((bucket) => (
+            <div key={bucket.label} style={{ background: C.bgPanelLight, borderRadius: 10, padding: 12, textAlign: 'center', border: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 11, color: C.creamDim, marginBottom: 4 }}>{bucket.label}</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: C.caramelLight, fontSize: 20 }}>{bucket.count}명</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  데이터베이스 탭                                                    */
+/* ---------------------------------------------------------------- */
+function DatabaseTab({ onExport, loading }) {
+  return (
+    <div>
+      <SectionTitle eyebrow="Database Tools" title="데이터베이스 관리" />
+      <Panel style={{ padding: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: C.creamDim, lineHeight: 1.6, marginBottom: 16 }}>
+          전체 플레이어 데이터(JSON)를 백업용으로 내보냅니다. 플레이어 수에 따라 시간이 걸릴 수 있어요.
+        </div>
+        <Btn variant="gold" onClick={onExport} disabled={loading} style={{ width: '100%', justifyContent: 'center' }}>
+          <Download size={14} /> 전체 데이터 내보내기 (JSON)
+        </Btn>
+      </Panel>
+
+      <Panel style={{ padding: 16, marginBottom: 16, border: `1px solid ${C.berry}`, background: '#3B1A1A' }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 8 }}>⚠ 위험 구역</div>
+        <div style={{ fontSize: 12, color: C.creamDim, lineHeight: 1.6, marginBottom: 12 }}>
+          아래 작업은 되돌릴 수 없습니다. 신중하게 사용하세요.
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Btn variant="danger" small disabled><Trash2 size={12} /> 모든 플레이어 삭제 (미구현)</Btn>
+          <Btn variant="danger" small disabled><RotateCcw size={12} /> 전체 게임 리셋 (미구현)</Btn>
+        </div>
+      </Panel>
+
+      <Panel style={{ padding: 16 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>필요한 Supabase RPC 함수들</div>
+        <div style={{ fontSize: 11, color: C.creamDim, lineHeight: 1.8, fontFamily: "'JetBrains Mono', monospace", background: C.bgPanelLight, borderRadius: 8, padding: 12, border: `1px solid ${C.line}`, overflowX: 'auto' }}>
+          {`-- 관리자용 플레이어 목록 조회
+CREATE OR REPLACE FUNCTION admin_get_players(p_limit INT DEFAULT 100)
+RETURNS TABLE (
+  id UUID,
+  username TEXT,
+  money NUMERIC,
+  total_revenue NUMERIC,
+  total_produced NUMERIC,
+  last_saved TIMESTAMPTZ,
+  created_at TIMESTAMPTZ
+) LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  RETURN QUERY
+  SELECT p.id, p.username, gs.data->>'money' as money,
+         gs.data->>'totalRevenue' as total_revenue,
+         gs.data->>'totalProduced' as total_produced,
+         gs.updated_at as last_saved,
+         p.created_at
+  FROM players p
+  LEFT JOIN game_saves gs ON gs.player_id = p.id
+  ORDER BY (gs.data->>'money')::NUMERIC DESC NULLS LAST
+  LIMIT p_limit;
+END; $$;
+
+-- 관리자용 전체 통계
+CREATE OR REPLACE FUNCTION admin_get_stats()
+RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  result JSON;
+BEGIN
+  SELECT json_build_object(
+    'total_players', (SELECT COUNT(*) FROM players),
+    'total_saves', (SELECT COUNT(*) FROM game_saves),
+    'oldest_player', (SELECT MIN(created_at) FROM players),
+    'newest_player', (SELECT MAX(created_at) FROM players)
+  ) INTO result;
+  RETURN result;
+END; $$;
+
+-- 플레이어 상세 정보
+CREATE OR REPLACE FUNCTION admin_get_player_detail(p_player_id UUID)
+RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  result JSON;
+BEGIN
+  SELECT json_build_object(
+    'player', to_jsonb(p),
+    'save_data', gs.data,
+    'save_updated', gs.updated_at
+  ) INTO result
+  FROM players p
+  LEFT JOIN game_saves gs ON gs.player_id = p.id
+  WHERE p.id = p_player_id;
+  RETURN result;
+END; $$;
+
+-- 플레이어 액션 (초기화/차단)
+CREATE OR REPLACE FUNCTION admin_player_action(p_player_id UUID, p_action TEXT)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF p_action = 'reset' THEN
+    UPDATE game_saves SET data = '{}'::jsonb, updated_at = NOW() WHERE player_id = p_player_id;
+  ELSIF p_action = 'ban' THEN
+    UPDATE players SET banned = TRUE WHERE id = p_player_id;
+    DELETE FROM game_saves WHERE player_id = p_player_id;
+  END IF;
+END; $$;
+
+-- 전체 데이터 내보내기
+CREATE OR REPLACE FUNCTION admin_export_all_data()
+RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  result JSON;
+BEGIN
+  SELECT json_build_object(
+    'exported_at', NOW(),
+    'players', (SELECT json_agg(to_jsonb(p)) FROM players p),
+    'saves', (SELECT json_agg(to_jsonb(gs)) FROM game_saves gs)
+  ) INTO result;
+  RETURN result;
+END; $$;`}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  플레이어 상세 모달                                                  */
+/* ---------------------------------------------------------------- */
+function PlayerDetailModal({ player, onClose, onAction }) {
+  const saveData = player.save_data || {};
+  const lines = saveData.lines || [];
+  const staff = saveData.staff || [];
+  const upgrades = saveData.upgrades || [];
+  const warehouse = saveData.warehouse || {};
+  const resources = saveData.resources || {};
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20, overflow: 'auto' }}>
+      <div style={{ width: '100%', maxWidth: 800, background: C.bgPanel, border: `1px solid ${C.line}`, borderRadius: 16, padding: 24, maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: `1px solid ${C.line}`, paddingBottom: 16 }}>
+          <div>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 20, color: C.cream }}>{player.player?.username || 'Unknown'}</div>
+            <div style={{ fontSize: 11, color: C.creamDim }}>ID: {player.player?.id || 'N/A'}</div>
+          </div>
+          <Btn variant="ghost" onClick={onClose}><X size={18} /></Btn>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
+          {[
+            ['💰', '자산', `${fmt(Number(saveData.money) || 0)}불`],
+            ['📈', '누적 매출', `${fmt(Number(saveData.totalRevenue) || 0)}불`],
+            ['📦', '누적 생산', `${fmt(Number(saveData.totalProduced) || 0)}개`],
+            ['🏭', '생산 라인', `${lines.length}개`],
+            ['👥', '직원 수', `${staff.length}명`],
+            ['✨', '업그레이드', `${upgrades.length}개`],
+            ['🏦', '대출금', `${fmt(Number(saveData.debt) || 0)}불`],
+            ['🗃', '창고 사용', `${fmt(Object.values(warehouse).reduce((a,b)=>a+b,0))}개`],
+          ].map(([icon, label, value]) => (
+            <Panel key={label} style={{ padding: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 18 }}>{icon}</div>
+              <div style={{ fontSize: 10, color: C.creamDim, marginBottom: 2 }}>{label}</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: C.gold, fontSize: 15 }}>{value}</div>
+            </Panel>
+          ))}
+        </div>
+
+        {lines.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 10 }}>생산 라인</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))', gap: 10 }}>
+              {lines.map((line, i) => (
+                <Panel key={i} style={{ padding: 10 }}>
+                  <div style={{ fontWeight: 600, color: C.cream }}>라인 #{i + 1} · Lv.{line.level}</div>
+                  <div style={{ fontSize: 11, color: C.creamDim }}>진행률: {Math.floor(line.progress)}% {line.blocked ? '⚠ 차단됨' : ''}</div>
+                  <div style={{ fontSize: 11, color: C.creamDim }}>레시피: {line.recipeId}</div>
+                  {line.staffId && <div style={{ fontSize: 11, color: C.pistachio }}>직원 배정됨</div>}
+                </Panel>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {Object.keys(warehouse).length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 10 }}>창고 재고</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px,1fr))', gap: 8 }}>
+              {Object.entries(warehouse).map(([key, val]) => (
+                <Panel key={key} style={{ padding: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 16 }}>{key}</div>
+                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: C.gold }}>{fmt(val)}</div>
+                </Panel>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: `1px solid ${C.line}`, paddingTop: 16 }}>
+          <Btn variant="ghost" onClick={onClose}>닫기</Btn>
+          <Btn variant="danger" onClick={() => onAction('reset')}><RotateCcw size={14} /> 데이터 초기화</Btn>
+          <Btn variant="danger" onClick={() => onAction('ban')}><Ban size={14} /> 플레이어 차단</Btn>
+        </div>
+      </div>
     </div>
   );
 }
