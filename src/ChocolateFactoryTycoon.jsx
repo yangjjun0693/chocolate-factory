@@ -587,7 +587,26 @@ export default function ChocolateFactoryTycoon() {
     setPlayer({ id, username, password, guest: false });
     // 서버에 저장된 세이브가 있으면 불러오고, 없으면(신규 가입) 기본값 유지
     if (data && Object.keys(data).length > 0) {
-      setG((prev) => ({ ...initialGame(), ...data, toast: null }));
+      setG((prev) => {
+        const fresh = initialGame();
+        // 주의: 단순 스프레드({...fresh, ...data})는 얕은 병합이라, 신규 재료(헤이즐넛/말차 등)가
+        // 추가되기 "전"에 저장된 구버전 세이브의 resources/prices 객체가 기본값을 통째로 덮어써서
+        // 새로 추가된 키가 통째로 사라진다 (→ 상점에서 NaN개/undefined불로 표시되고, 구매 시
+        // undefined + amount = NaN이 영구히 박혀버림). resources/prices/inventory처럼 "새 키가
+        // 계속 추가될 수 있는" 중첩 객체는 항상 기본값과 저장값을 깊게 병합해야 한다.
+        return {
+          ...fresh,
+          ...data,
+          resources: { ...fresh.resources, ...data.resources },
+          prices: { ...fresh.prices, ...data.prices },
+          warehouse: { ...fresh.warehouse, ...data.warehouse },
+          inventory: {
+            fragments: { ...fresh.inventory.fragments, ...data.inventory?.fragments },
+            buffs: { ...fresh.inventory.buffs, ...data.inventory?.buffs },
+          },
+          toast: null,
+        };
+      });
     }
     pushToast(`${username}님, 환영해요!`, 'pistachio');
   }, [pushToast]);
@@ -703,7 +722,10 @@ export default function ChocolateFactoryTycoon() {
               // 원재료 절감 업그레이드는 "기본 초콜릿 3종(tier 1)"의 원재료에만 적용
               const amt = isProductIngredient || recipe.tier !== 1 ? v : v * (1 - ingSave);
               needed[k] = { amt, isProductIngredient };
-              const available = isProductIngredient ? (warehouse[k] || 0) : resources[k];
+              // (resources[k] || 0) 방어: undefined일 때 "undefined < amt"는 항상 false라서
+              // canProduce가 false로 안 걸리고 통과해버려, 아래 -= 에서 NaN이 영구히 박히는
+              // 문제가 있었다. 0으로 폴백하면 "재료 없음"으로 정상 처리된다.
+              const available = isProductIngredient ? (warehouse[k] || 0) : (resources[k] || 0);
               if (available < amt) canProduce = false;
             });
             // 자동판매가 꺼져 있으면, 창고에 넣을 자리가 있는지도 미리 확인해서
@@ -713,7 +735,7 @@ export default function ChocolateFactoryTycoon() {
             if (canProduce && hasSpace) {
               Object.entries(needed).forEach(([k, { amt, isProductIngredient }]) => {
                 if (isProductIngredient) warehouse[k] = (warehouse[k] || 0) - amt;
-                else resources[k] -= amt;
+                else resources[k] = (resources[k] || 0) - amt;
               });
               progress = 0;
               totalProduced += 1;
@@ -769,9 +791,11 @@ export default function ChocolateFactoryTycoon() {
   /* ---------------- 액션들 ---------------- */
   const buyResource = (key, amount) => {
     setG((prev) => {
-      const cost = prev.prices[key] * amount;
+      // prices[key]가 undefined면 cost가 NaN이 되고, "money < NaN"은 항상 false라서
+      // 자금 부족 체크를 그냥 통과해버려 money 전체가 NaN으로 오염된다. 0 폴백으로 방지.
+      const cost = (prev.prices[key] || 0) * amount;
       if (prev.money < cost) { pushToast('자금이 부족해요', 'berry'); return prev; }
-      return { ...prev, money: prev.money - cost, resources: { ...prev.resources, [key]: prev.resources[key] + amount } };
+      return { ...prev, money: prev.money - cost, resources: { ...prev.resources, [key]: (prev.resources[key] || 0) + amount } };
     });
   };
 
