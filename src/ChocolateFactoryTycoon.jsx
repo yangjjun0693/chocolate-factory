@@ -1796,6 +1796,14 @@ function AdminPage({ onClose }) {
   const [playerDetail, setPlayerDetail] = useState(null);
   const [stats, setStats] = useState(null);
   const [activeTab, setActiveTab] = useState('players');
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+
+  const pushToast = useCallback((msg, tone = 'gold') => {
+    setToast({ msg, tone, key: Date.now() });
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2200);
+  }, []);
 
   const supabaseAdminRpc = useCallback(async (fn, body) => {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
@@ -1815,6 +1823,46 @@ function AdminPage({ onClose }) {
     }
     return json;
   }, []);
+
+  const adjustMoney = async (playerId, amount) => {
+    if (!window.confirm(`${amount > 0 ? '지급' : '차감'}하시겠어요? ${Math.abs(amount).toLocaleString('ko-KR')}불`)) return;
+    try {
+      await supabaseAdminRpc('admin_adjust_money', { p_player_id: playerId, p_amount: amount });
+      loadPlayers();
+      if (selectedPlayer?.id === playerId) loadPlayerDetail(playerId);
+      pushToast(`${amount > 0 ? '지급' : '차감'} 완료: ${Math.abs(amount).toLocaleString('ko-KR')}불`, amount > 0 ? 'pistachio' : 'berry');
+    } catch (err) {
+      setError(err.message || '자금 조정 실패');
+    }
+  };
+
+  const toggleAds = async (playerId, enabled) => {
+    try {
+      await supabaseAdminRpc('admin_toggle_ads', { p_player_id: playerId, p_enabled: enabled });
+      if (selectedPlayer?.id === playerId) loadPlayerDetail(playerId);
+      pushToast(enabled ? '광고 활성화됨' : '광고 비활성화됨', 'pistachio');
+    } catch (err) {
+      setError(err.message || '광고 설정 실패');
+    }
+  };
+
+  const setJackpotRate = async (rate) => {
+    try {
+      await supabaseAdminRpc('admin_set_jackpot_rate', { p_rate: rate });
+      pushToast(`잭팟 확률 ${rate}%로 설정됨`, 'gold');
+    } catch (err) {
+      setError(err.message || '확률 설정 실패');
+    }
+  };
+
+  const setGlobalConfig = async (key, value) => {
+    try {
+      await supabaseAdminRpc('admin_set_config', { p_key: key, p_value: value });
+      pushToast(`${key} 설정됨: ${value}`, 'gold');
+    } catch (err) {
+      setError(err.message || '설정 실패');
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -1930,7 +1978,7 @@ function AdminPage({ onClose }) {
         ::-webkit-scrollbar-thumb { background: ${C.bgPanelLighter}; border-radius: 4px; }
       `}</style>
 
-      <div style={{ width: '100%', maxWidth: 1200, minHeight: 640, background: C.bgDeep, fontFamily: "'Space Grotesk', sans-serif", position: 'relative', paddingBottom: 24 }}>
+      <div style={{ width: '100%', maxWidth: 1600, minHeight: 640, background: C.bgDeep, fontFamily: "'Space Grotesk', sans-serif", position: 'relative', paddingBottom: 24 }}>
         {/* 헤더 */}
         <div style={{ padding: '18px 22px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -1952,6 +2000,8 @@ function AdminPage({ onClose }) {
         <div style={{ padding: '16px 22px 0', display: 'flex', gap: 6, borderBottom: `1px solid ${C.line}`, overflowX: 'auto' }}>
           {[
             { id: 'players', label: '플레이어 관리', icon: Users },
+            { id: 'player-controls', label: '플레이어 제어', icon: Wrench },
+            { id: 'game-config', label: '게임 설정', icon: Gauge },
             { id: 'stats', label: '통계', icon: Activity },
             { id: 'database', label: '데이터베이스', icon: Database },
           ].map((t) => {
@@ -1981,6 +2031,25 @@ function AdminPage({ onClose }) {
               onRefresh={loadPlayers}
             />
           )}
+          {activeTab === 'player-controls' && (
+            <PlayerControlsTab
+              players={players}
+              selectedPlayer={selectedPlayer}
+              playerDetail={playerDetail}
+              onSelectPlayer={setSelectedPlayer}
+              onLoadDetail={loadPlayerDetail}
+              onAdjustMoney={adjustMoney}
+              onToggleAds={toggleAds}
+              onSetJackpotRate={setJackpotRate}
+              onSetGlobalConfig={setGlobalConfig}
+            />
+          )}
+          {activeTab === 'game-config' && (
+            <GameConfigTab
+              onSetJackpotRate={setJackpotRate}
+              onSetGlobalConfig={setGlobalConfig}
+            />
+          )}
           {activeTab === 'stats' && (
             <StatsTab stats={stats} players={players} />
           )}
@@ -1989,15 +2058,363 @@ function AdminPage({ onClose }) {
           )}
         </div>
 
+        {toast && (
+          <div
+            key={toast.key}
+            style={{
+              position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)', animation: 'toastIn .25s ease',
+              background: C.bgPanelLighter, border: `1px solid ${toast.tone === 'berry' ? C.berry : C.caramelLight}`, color: C.cream,
+              padding: '9px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 50, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            }}
+          >
+            {toast.msg}
+          </div>
+        )}
+
         {selectedPlayer && playerDetail && (
           <PlayerDetailModal
             player={playerDetail}
             onClose={() => { setSelectedPlayer(null); setPlayerDetail(null); }}
             onAction={(action) => handlePlayerAction(selectedPlayer.id, action)}
+            onAdjustMoney={adjustMoney}
+            onToggleAds={toggleAds}
           />
         )}
       </div>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  플레이어 제어 탭                                                   */
+/* ---------------------------------------------------------------- */
+function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlayer, onLoadDetail, onAdjustMoney, onToggleAds, onSetJackpotRate, onSetGlobalConfig }) {
+  const [moneyAmount, setMoneyAmount] = useState('');
+  const [jackpotRate, setJackpotRateState] = useState(3);
+  const [configKey, setConfigKey] = useState('productionSpeedMult');
+  const [configValue, setConfigValue] = useState('1.0');
+
+  return (
+    <div>
+      {selectedPlayer && playerDetail ? (
+        <PlayerControlPanel
+          player={playerDetail}
+          moneyAmount={moneyAmount}
+          setMoneyAmount={setMoneyAmount}
+          onAdjustMoney={onAdjustMoney}
+          onToggleAds={onToggleAds}
+          onClose={() => onSelectPlayer(null)}
+        />
+      ) : (
+        <div>
+          <SectionTitle eyebrow="Player Controls" title="플레이어 선택" />
+          <Panel style={{ padding: 24, textAlign: 'center', color: C.creamDim }}>
+            <Users size={48} style={{ marginBottom: 12, color: C.caramelLight }} />
+            <div style={{ fontSize: 14 }}>왼쪽 '플레이어 관리' 탭에서 플레이어를 클릭하거나</div>
+            <div style={{ fontSize: 14, marginTop: 4 }}>아래 목록에서 선택하세요.</div>
+          </Panel>
+          <SectionTitle eyebrow="Quick Select" title="플레이어 빠른 선택" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px,1fr))', gap: 12 }}>
+            {players.map((p, i) => {
+              const isSelected = selectedPlayer?.id === p.id;
+              const panelStyle = {
+                padding: 16,
+                cursor: 'pointer',
+                border: isSelected ? `2px solid ${C.caramelLight}` : `1px solid ${C.line}`,
+                background: isSelected ? C.bgPanelLighter : C.bgPanel,
+                transition: 'all .15s',
+              };
+              return (
+                <Panel key={p.id} style={panelStyle} onClick={() => { onSelectPlayer(p); onLoadDetail(p.id); }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, color: C.cream, fontSize: 15 }}>{p.username}</div>
+                    <div style={{ fontFamily: "'JetBrains Mono', monospace", color: C.gold, fontWeight: 700 }}>{fmt(Number(p.money) || 0)}불</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.creamDim, display: 'flex', gap: 16 }}>
+                    <span>매출: {fmt(Number(p.total_revenue) || 0)}불</span>
+                    <span>생산: {fmt(Number(p.total_produced) || 0)}개</span>
+                  </div>
+                </Panel>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 30 }}>
+        <SectionTitle eyebrow="Global Settings" title="전역 게임 설정" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 16 }}>
+          <Panel style={{ padding: 16 }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>🎰 카지노 잭팟 확률</div>
+            <div style={{ fontSize: 11, color: C.creamDim, marginBottom: 10 }}>현재 기본값: 3% (트리플 매치)</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input
+                type="number"
+                min="0.1"
+                max="100"
+                step="0.1"
+                value={jackpotRate}
+                onChange={(e) => setJackpotRateState(Number(e.target.value))}
+                style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+              />
+              <Btn variant="gold" onClick={() => onSetJackpotRate(jackpotRate)} style={{ justifyContent: 'center' }}>
+                적용
+              </Btn>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[0.5, 1, 2, 3, 5, 10, 25, 50].map((r) => (
+                <Btn key={r} variant="ghost" small onClick={() => { setJackpotRateState(r); onSetJackpotRate(r); }}>{r}%</Btn>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel style={{ padding: 16 }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>⚙️ 게임 설정 값 변경</div>
+            <div style={{ fontSize: 11, color: C.creamDim, marginBottom: 10 }}>키와 값을 직접 입력 (RPC 함수 admin_set_config 필요)</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                type="text"
+                placeholder="설정 키 (예: productionSpeedMult, ingredientCostMult, warehouseBaseCap, loanInterestRate)"
+                value={configKey}
+                onChange={(e) => setConfigKey(e.target.value)}
+                style={{ background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+              />
+              <input
+                type="text"
+                placeholder="값 (예: 1.5, 0.8, 500, 0.001)"
+                value={configValue}
+                onChange={(e) => setConfigValue(e.target.value)}
+                style={{ background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+              />
+              <Btn variant="gold" onClick={() => onSetGlobalConfig(configKey, configValue)} style={{ justifyContent: 'center' }}>
+                설정 적용
+              </Btn>
+            </div>
+            <div style={{ marginTop: 12, fontSize: 10, color: C.creamDim, lineHeight: 1.6 }}>
+              주요 키: productionSpeedMult, ingredientCostMult, warehouseBaseCap, loanInterestRate, slotJackpotBaseRate, autoSaveInterval
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlayerControlPanel({ player, moneyAmount, setMoneyAmount, onAdjustMoney, onToggleAds, onClose }) {
+  const saveData = player.save_data || {};
+  const hasAds = saveData.adsEnabled !== false;
+
+  return (
+    <div>
+      <SectionTitle
+        eyebrow="Player Control"
+        title={player.player?.username}
+        right={
+          <Btn variant="ghost" small onClick={onClose}><RotateCcw size={14} /> 다른 플레이어</Btn>
+        }
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 16, marginBottom: 20 }}>
+        <Panel style={{ padding: 16 }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>💰 자금 조정</div>
+          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>현재 자산: <span style={{ color: C.gold, fontFamily: "'JetBrains Mono', monospace" }}>{fmt(Number(saveData.money) || 0)}불</span></div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <input
+              type="number"
+              placeholder="금액 (음수면 차감)"
+              value={moneyAmount}
+              onChange={(e) => setMoneyAmount(e.target.value)}
+              style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[100, 500, 1000, 5000, 10000, 50000].map((amt) => (
+              <Btn key={amt} variant="gold" small onClick={() => { setMoneyAmount(amt); onAdjustMoney(player.player.id, amt); }}>{fmt(amt)} 지급</Btn>
+            ))}
+            {[-100, -500, -1000, -5000].map((amt) => (
+              <Btn key={amt} variant="danger" small onClick={() => { setMoneyAmount(amt); onAdjustMoney(player.player.id, amt); }}>{fmt(Math.abs(amt))} 차감</Btn>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel style={{ padding: 16 }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>🖼️ 배너 광고</div>
+          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>현재 상태: <span style={{ color: hasAds ? C.pistachio : C.berry, fontWeight: 700 }}>{hasAds ? '활성화됨' : '비활성화됨'}</span></div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn variant={hasAds ? 'ghost' : 'gold'} onClick={() => onToggleAds(player.player.id, true)} disabled={hasAds}>활성화</Btn>
+            <Btn variant={hasAds ? 'danger' : 'ghost'} onClick={() => onToggleAds(player.player.id, false)} disabled={!hasAds}>비활성화</Btn>
+          </div>
+        </Panel>
+
+        <Panel style={{ padding: 16 }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>📊 빠른 정보</div>
+          <div style={{ fontSize: 11, color: C.creamDim, lineHeight: 2 }}>
+            <div>레벨: {saveData.lines?.reduce((max, l) => Math.max(max, l.level), 1) || 1}</div>
+            <div>직원: {saveData.staff?.length || 0}명</div>
+            <div>업그레이드: {saveData.upgrades?.length || 0}개</div>
+            <div>대출금: {fmt(Number(saveData.debt) || 0)}불</div>
+            <div>창고: {fmt(Object.values(saveData.warehouse || {}).reduce((a,b)=>a+b,0))}개</div>
+          </div>
+        </Panel>
+      </div>
+
+      <Panel style={{ padding: 16, border: `1px solid ${C.berry}`, background: '#3B1A1A' }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.berry, fontSize: 15, marginBottom: 8 }}>⚠ 위험한 작업</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Btn variant="danger" small onClick={() => { if(window.confirm('정말로 이 플레이어의 데이터를 초기화하시겠습니까?')) onAdjustMoney(player.player.id, -(Number(saveData.money) || 0)); }}>전 자산 회수</Btn>
+          <Btn variant="danger" small onClick={() => { if(window.confirm('정말로 이 플레이어를 차단하시겠습니까?')) onAdjustMoney(player.player.id, 0); /* ban action */ }}>차단</Btn>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  게임 설정 탭                                                       */
+/* ---------------------------------------------------------------- */
+function GameConfigTab({ onSetJackpotRate, onSetGlobalConfig }) {
+  return (
+    <div>
+      <SectionTitle eyebrow="Game Configuration" title="전역 게임 설정" right={<span style={{ fontSize: 11, color: C.creamDim }}>변경 사항은 서버 RPC(admin_set_config) 필요</span>} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px,1fr))', gap: 16, marginBottom: 24 }}>
+        <ConfigPanel title="🎰 카지노 설정" items={[
+          { key: 'slotJackpotBaseRate', label: '잭팟 기본 확률 (%)', default: '3', type: 'number', step: 0.1, min: 0.1, max: 100 },
+          { key: 'slotPartialPayoutMult', label: '페어 배당 배율', default: '0.5', type: 'number', step: 0.1, min: 0.1, max: 2 },
+          { key: 'casinoMaxBet', label: '최대 베팅액', default: '50000', type: 'number', step: 100, min: 100 },
+          { key: 'casinoEnabled', label: '카지노 활성화', default: 'true', type: 'boolean' },
+        ]} onSetConfig={onSetGlobalConfig} />
+
+        <ConfigPanel title="🏭 생산 설정" items={[
+          { key: 'productionSpeedMult', label: '생산 속도 배율', default: '1.0', type: 'number', step: 0.1, min: 0.1, max: 10 },
+          { key: 'ingredientCostMult', label: '원재료 비용 배율', default: '1.0', type: 'number', step: 0.1, min: 0.1, max: 5 },
+          { key: 'baseProductionSpeed', label: '기본 생산 속도', default: '20', type: 'number', step: 1, min: 1 },
+          { key: 'productionPerLevel', label: '레벨당 속도 증가', default: '6', type: 'number', step: 1, min: 1 },
+        ]} onSetConfig={onSetGlobalConfig} />
+
+        <ConfigPanel title="📦 창고 & 경제" items={[
+          { key: 'warehouseBaseCap', label: '기본 창고 용량', default: '220', type: 'number', step: 10, min: 50 },
+          { key: 'warehouseUpgrade1', label: '창고 확장 I 추가량', default: '100', type: 'number', step: 10, min: 10 },
+          { key: 'warehouseUpgrade2', label: '창고 확장 II 추가량', default: '250', type: 'number', step: 10, min: 10 },
+          { key: 'loanInterestRate', label: '대출 이자율 (초당)', default: '0.0008', type: 'number', step: 0.0001, min: 0, max: 0.01 },
+          { key: 'maxDebt', label: '대출 한도', default: '6000', type: 'number', step: 100, min: 100 },
+        ]} onSetConfig={onSetGlobalConfig} />
+
+        <ConfigPanel title="👥 직원 & 업그레이드" items={[
+          { key: 'staffProductionBoostPerLevel', label: '생산직 레벨당 속도 보너스', default: '9', type: 'number', step: 1, min: 0 },
+          { key: 'staffRevenueBonusPerLevel', label: '생산직 레벨당 수익 보너스 (%)', default: '3', type: 'number', step: 1, min: 0 },
+          { key: 'staffRevenueBonusCap', label: '수익 보너스 상한 (%)', default: '100', type: 'number', step: 5, min: 10 },
+          { key: 'researchDiscountPerStaff', label: '연구직 1인당 할인 (%)', default: '4', type: 'number', step: 1, min: 0 },
+          { key: 'maxResearchDiscount', label: '최대 연구 할인 (%)', default: '30', type: 'number', step: 5, min: 0 },
+        ]} onSetConfig={onSetGlobalConfig} />
+
+        <ConfigPanel title="📈 레시피 가격 & 해금" items={[
+          { key: 'recipePriceMult', label: '전체 판매가 배율', default: '1.0', type: 'number', step: 0.1, min: 0.1, max: 5 },
+          { key: 'premiumBrandingBonus', label: '프리미엄 브랜딩 보너스 (%)', default: '25', type: 'number', step: 5, min: 0 },
+          { key: 'ingredientSaveBonus', label: '원재료 절감 보너스 (%)', default: '20', type: 'number', step: 5, min: 0 },
+        ]} onSetConfig={onSetGlobalConfig} />
+
+        <ConfigPanel title="⏱️ 시스템" items={[
+          { key: 'autoSaveInterval', label: '자동 저장 간격 (ms)', default: '20000', type: 'number', step: 1000, min: 5000 },
+          { key: 'gameTickInterval', label: '게임 틱 간격 (ms)', default: '1000', type: 'number', step: 100, min: 100 },
+          { key: 'maxLines', label: '최대 생산 라인 수', default: '10', type: 'number', step: 1, min: 4, max: 20 },
+          { key: 'staffMaxLevel', label: '직원 최대 레벨', default: '10', type: 'number', step: 1, min: 5, max: 50 },
+        ]} onSetConfig={onSetGlobalConfig} />
+      </div>
+
+      <Panel style={{ padding: 16, border: `1px solid ${C.line}` }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>📝 사용 가능한 설정 키 전체 목록</div>
+        <div style={{ fontSize: 10, color: C.creamDim, lineHeight: 1.8, fontFamily: "'JetBrains Mono', monospace", background: C.bgPanelLight, borderRadius: 8, padding: 12, border: `1px solid ${C.line}`, overflowX: 'auto' }}>
+          {`# 카지노
+slotJackpotBaseRate: 3        # 잭팟 기본 확률 (%)
+slotPartialPayoutMult: 0.5    # 페어 배당 배율
+casinoMaxBet: 50000           # 최대 베팅액
+casinoEnabled: true           # 카지노 활성화
+
+# 생산
+productionSpeedMult: 1.0      # 생산 속도 전역 배율
+ingredientCostMult: 1.0       # 원재료 비용 배율
+baseProductionSpeed: 20       # 기본 생산 속도
+productionPerLevel: 6         # 라인 레벨당 속도 증가
+
+# 창고 & 경제
+warehouseBaseCap: 220         # 기본 창고 용량
+warehouseUpgrade1: 100        # 창고 확장 I
+warehouseUpgrade2: 250        # 창고 확장 II
+loanInterestRate: 0.0008      # 대출 이자율 (초당 복리)
+maxDebt: 6000                 # 대출 한도
+
+# 직원
+staffProductionBoostPerLevel: 9      # 생산직 레벨당 속도 보너스
+staffRevenueBonusPerLevel: 3         # 생산직 레벨당 수익 보너스 (%)
+staffRevenueBonusCap: 100            # 수익 보너스 상한 (%)
+researchDiscountPerStaff: 4          # 연구직 1인당 할인 (%)
+maxResearchDiscount: 30              # 최대 연구 할인 (%)
+
+# 레시피/가격
+recipePriceMult: 1.0         # 전체 판매가 배율
+premiumBrandingBonus: 25     # 프리미엄 브랜딩 보너스 (%)
+ingredientSaveBonus: 20      # 원재료 절감 보너스 (%)
+
+# 시스템
+autoSaveInterval: 20000      # 자동 저장 간격 (ms)
+gameTickInterval: 1000       # 게임 틱 간격 (ms)
+maxLines: 10                 # 최대 생산 라인 수
+staffMaxLevel: 10            # 직원 최대 레벨`}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function ConfigPanel({ title, items, onSetConfig }) {
+  const [values, setValues] = useState(() => {
+    const initial = {};
+    items.forEach(item => { initial[item.key] = item.default; });
+    return initial;
+  });
+
+  const handleChange = (key, value) => {
+    setValues(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleApply = (key) => {
+    onSetGlobalConfig(key, values[key]);
+  };
+
+  return (
+    <Panel style={{ padding: 16 }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 14, marginBottom: 12 }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map((item) => (
+          <div key={item.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: C.creamDim }}>{item.label}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: C.caramelLight }}>{item.key}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {item.type === 'boolean' ? (
+                <select value={values[item.key]} onChange={(e) => handleChange(item.key, e.target.value)} style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '6px 8px', fontSize: 12 }}>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              ) : (
+                <input
+                  type="number"
+                  min={item.min}
+                  max={item.max}
+                  step={item.step}
+                  value={values[item.key]}
+                  onChange={(e) => handleChange(item.key, e.target.value)}
+                  style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '6px 8px', fontSize: 12 }}
+                />
+              )}
+              <Btn variant="gold" small onClick={() => handleApply(item.key)}>적용</Btn>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -2229,17 +2646,18 @@ END; $$;`}
 /* ---------------------------------------------------------------- */
 /*  플레이어 상세 모달                                                  */
 /* ---------------------------------------------------------------- */
-function PlayerDetailModal({ player, onClose, onAction }) {
+function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleAds }) {
   const saveData = player.save_data || {};
   const lines = saveData.lines || [];
   const staff = saveData.staff || [];
   const upgrades = saveData.upgrades || [];
   const warehouse = saveData.warehouse || {};
   const resources = saveData.resources || {};
+  const hasAds = saveData.adsEnabled !== false;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20, overflow: 'auto' }}>
-      <div style={{ width: '100%', maxWidth: 800, background: C.bgPanel, border: `1px solid ${C.line}`, borderRadius: 16, padding: 24, maxHeight: '90vh', overflow: 'auto' }}>
+      <div style={{ width: '100%', maxWidth: 900, background: C.bgPanel, border: `1px solid ${C.line}`, borderRadius: 16, padding: 24, maxHeight: '90vh', overflow: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: `1px solid ${C.line}`, paddingBottom: 16 }}>
           <div>
             <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 20, color: C.cream }}>{player.player?.username || 'Unknown'}</div>
@@ -2258,6 +2676,7 @@ function PlayerDetailModal({ player, onClose, onAction }) {
             ['✨', '업그레이드', `${upgrades.length}개`],
             ['🏦', '대출금', `${fmt(Number(saveData.debt) || 0)}불`],
             ['🗃', '창고 사용', `${fmt(Object.values(warehouse).reduce((a,b)=>a+b,0))}개`],
+            ['🖼️', '배너 광고', hasAds ? '활성화' : '비활성화'],
           ].map(([icon, label, value]) => (
             <Panel key={label} style={{ padding: 12, textAlign: 'center' }}>
               <div style={{ fontSize: 18 }}>{icon}</div>
@@ -2265,6 +2684,23 @@ function PlayerDetailModal({ player, onClose, onAction }) {
               <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: C.gold, fontSize: 15 }}>{value}</div>
             </Panel>
           ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 16, marginBottom: 20 }}>
+          <Panel style={{ padding: 16 }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 14, marginBottom: 12 }}>💰 자금 조정</div>
+            <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>현재 자산: <span style={{ color: C.gold, fontFamily: "'JetBrains Mono', monospace" }}>{fmt(Number(saveData.money) || 0)}불</span></div>
+            <QuickMoneyButtons playerId={player.player?.id} onAdjustMoney={onAdjustMoney} />
+          </Panel>
+
+          <Panel style={{ padding: 16 }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 14, marginBottom: 12 }}>🖼️ 배너 광고</div>
+            <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>현재 상태: <span style={{ color: hasAds ? C.pistachio : C.berry, fontWeight: 700 }}>{hasAds ? '활성화됨' : '비활성화됨'}</span></div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn variant={hasAds ? 'ghost' : 'gold'} onClick={() => onToggleAds(player.player.id, true)} disabled={hasAds}>활성화</Btn>
+              <Btn variant={hasAds ? 'danger' : 'ghost'} onClick={() => onToggleAds(player.player.id, false)} disabled={!hasAds}>비활성화</Btn>
+            </div>
+          </Panel>
         </div>
 
         {lines.length > 0 && (
@@ -2303,6 +2739,19 @@ function PlayerDetailModal({ player, onClose, onAction }) {
           <Btn variant="danger" onClick={() => onAction('ban')}><Ban size={14} /> 플레이어 차단</Btn>
         </div>
       </div>
+    </div>
+  );
+}
+
+function QuickMoneyButtons({ playerId, onAdjustMoney }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {[100, 500, 1000, 5000, 10000, 50000, 100000].map((amt) => (
+        <Btn key={amt} variant="gold" small onClick={() => onAdjustMoney(playerId, amt)}>{fmt(amt)} 지급</Btn>
+      ))}
+      {[-100, -500, -1000, -5000, -10000].map((amt) => (
+        <Btn key={amt} variant="danger" small onClick={() => onAdjustMoney(playerId, amt)}>{fmt(Math.abs(amt))} 차감</Btn>
+      ))}
     </div>
   );
 }
