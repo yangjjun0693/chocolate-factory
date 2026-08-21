@@ -35,8 +35,8 @@ const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Fraun
 /*  - 권장 사이즈: 160 x 600 (와이드 스크린 세로 배너)                    */
 /* ---------------------------------------------------------------- */
 const AD_BANNERS = {
-  left: { src: '', href: '', alt: '' },
-  right: { src: 'https://i.imgur.com/xfa4mYF.png', href: '', alt: 'https://i.imgur.com/xfa4mYF.png' },
+  left: { src: 'https://i.imgur.com/lghIHV2.png', href: 'https://kasaneteto.jp/', alt: 'https://i.imgur.com/lghIHV2.png' },
+  right: { src: 'https://i.imgur.com/xfa4mYF.png', href: '/돈줘.html', alt: 'https://i.imgur.com/xfa4mYF.png' },
 };
 
 /* ---------------------------------------------------------------- */

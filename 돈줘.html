@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>돈줘라</title>
+	</head>
+	<body>
+		<h1>돈줘라 이것들아</h1>
+		<div style="display: flex; gap: 10px;">
+			<button id="changeBtn">시른뎅ㅋ</button>
+			<button id="accountBtn">계좌번호 띄우기</button>
+			<button onclick="location.href='/index.html'";>돌아가기</button>
+		</div>
+			<script>
+				const changeBtn = document.querySelector("#changeBtn")
+				const accountBtn = document.querySelector("#accountBtn")
+				const heading = document.querySelector('h1')
+				
+				changeBtn.addEventListener('click', () => {
+					heading.innerText = "돈주세용🥹";
+				});
+
+				accountBtn.addEventListener('click', () => {
+					heading.innerText = "토스뱅크 1908-1210-4055 양준영";
+				});
+		</script>
+	</body>
+</html>
