@@ -101,10 +101,11 @@ END; $$;
 CREATE OR REPLACE FUNCTION public.admin_set_jackpot_rate(p_rate NUMERIC)
 RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
-  -- 게임 설정 테이블이 있다면 업데이트, 없다면 무시
-  -- 실제로는 game_config 테이블이나 similar 필요
-  -- 여기서는 알림만
-  RAISE NOTICE 'Jackpot rate set to % (requires game_config table implementation)', p_rate;
+  INSERT INTO public.game_config (key, value, updated_at)
+  VALUES ('slotJackpotBaseRate', p_rate::TEXT, NOW())
+  ON CONFLICT (key) DO UPDATE SET
+    value = EXCLUDED.value,
+    updated_at = NOW();
 END; $$;
 
 -- 전역 게임 설정
@@ -170,3 +171,14 @@ INSERT INTO public.game_config (key, value, description) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 -- RLS 정책: 관리자 함수는 SECURITY DEFINER로 실행되므로 RLS 우회 가능
+
+-- 게임 설정 전체 조회
+CREATE OR REPLACE FUNCTION public.admin_get_config()
+RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  result JSON;
+BEGIN
+  SELECT json_object_agg(key, value) INTO result
+  FROM public.game_config;
+  RETURN COALESCE(result, '{}'::json);
+END; $$;

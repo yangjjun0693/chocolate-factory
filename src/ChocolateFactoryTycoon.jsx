@@ -381,6 +381,7 @@ export default function ChocolateFactoryTycoon() {
   const [g, setG] = useState(initialGame());
   const [tab, setTab] = useState('factory');
   const [showAdmin, setShowAdmin] = useState(false);
+  const [jackpotRate, setJackpotRate] = useState(3); // default 3%
   const toastTimer = useRef(null);
 
   // Admin page toggle with Ctrl+Shift+A
@@ -397,6 +398,32 @@ export default function ChocolateFactoryTycoon() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showAdmin]);
+
+  // Fetch game config on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_get_config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({}),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.slotJackpotBaseRate) {
+            setJackpotRate(Number(data.slotJackpotBaseRate));
+          }
+        }
+      } catch (e) {
+        console.warn('Config fetch failed:', e);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   // ---- 로그인 상태 & 저장 ----
   const [player, setPlayer] = useState(null); // { id, username, password }
@@ -831,7 +858,7 @@ export default function ChocolateFactoryTycoon() {
         {tab === 'shop' && <ShopTab g={g} priceMult={displayPriceMult} buyResource={buyResource} sellProduct={sellProduct} />}
         {tab === 'upgrade' && <UpgradeTab g={g} discount={discount} buyUpgrade={buyUpgrade} />}
         {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} levelUpStaff={levelUpStaff} staffRevMult={staffRevMult} />}
-        {tab === 'finance' && <FinanceTab g={g} takeLoan={takeLoan} repayLoan={repayLoan} resolveCasino={resolveCasino} />}
+        {tab === 'finance' && <FinanceTab g={g} takeLoan={takeLoan} repayLoan={repayLoan} resolveCasino={resolveCasino} jackpotRate={jackpotRate} />}
         {tab === 'dashboard' && <DashboardTab g={g} resetGame={resetGame} />}
         {tab === 'achievements' && <AchievementsTab g={g} />}
         {tab === 'leaderboard' && <LeaderboardTab currentUsername={player.username} currentMoney={g.money} />}
@@ -1316,8 +1343,33 @@ function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult }) {
 /* ---------------------------------------------------------------- */
 /*  대출 & 카지노 탭                                                   */
 /* ---------------------------------------------------------------- */
-function FinanceTab({ g, takeLoan, repayLoan, resolveCasino }) {
+function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
   const [customBet, setCustomBet] = useState('');
+
+  // Dynamic slot weights based on jackpotRate (%)
+  // Target: sum of (weight/100)^3 for all symbols = jackpotRate/100
+  const getSlotWeights = useCallback((rate) => {
+    const baseWeights = [30, 25, 20, 12, 10]; // 🍫 🍬 🤍 🍓 🫐
+    const baseSum = baseWeights.reduce((a, b) => a + b, 0); // 97
+    // Remaining weight for 💎 (diamond) to hit target jackpot rate
+    const targetRate = rate / 100; // e.g., 3% -> 0.03
+    const baseTripleProb = baseWeights.reduce((sum, w) => sum + Math.pow(w / 100, 3), 0);
+    let diamondWeight = 3; // default
+    // Solve for diamond weight: baseTripleProb + (diamondWeight/100)^3 = targetRate
+    const needed = targetRate - baseTripleProb;
+    if (needed > 0) {
+      diamondWeight = Math.min(50, Math.max(1, Math.round(Math.pow(needed * 1000000, 1/3))));
+    } else {
+      // If target is lower than base, scale all weights down
+      const scale = Math.pow(targetRate / baseTripleProb, 1/3);
+      diamondWeight = Math.max(1, Math.round(3 * scale));
+    }
+    return [...baseWeights, diamondWeight];
+  }, []);
+
+  const slotWeights = getSlotWeights(jackpotRate);
+  const slotSymbols = ['🍫', '🍬', '🤍', '🍓', '🫐', '💎'];
+  const slotPayouts = { '🍫': 2, '🍬': 2.5, '🤍': 3, '🍓': 5, '🫐': 6, '💎': 20 };
 
   // ---- 슬롯머신 스핀 연출 상태 (실제 자금 반영은 resolveCasino에게 위임) ----
   const [spinning, setSpinning] = useState(false);
@@ -1336,11 +1388,11 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino }) {
   const spinOnce = () => {
     const r = Math.random() * 100;
     let acc = 0;
-    for (let i = 0; i < SLOT_SYMBOLS.length; i++) {
-      acc += SLOT_WEIGHTS[i];
-      if (r <= acc) return SLOT_SYMBOLS[i];
+    for (let i = 0; i < slotSymbols.length; i++) {
+      acc += slotWeights[i];
+      if (r <= acc) return slotSymbols[i];
     }
-    return SLOT_SYMBOLS[SLOT_SYMBOLS.length - 1];
+    return slotSymbols[slotSymbols.length - 1];
   };
 
   const makeConfetti = () => {
@@ -1369,7 +1421,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino }) {
     let payout = 0;
     let outcome = 'lose';
     if (reels[0] === reels[1] && reels[1] === reels[2]) {
-      payout = Math.round(bet * SLOT_PAYOUTS[reels[0]]);
+      payout = Math.round(bet * slotPayouts[reels[0]]);
       outcome = 'jackpot';
     } else if (reels[0] === reels[1] || reels[1] === reels[2] || reels[0] === reels[2]) {
       payout = Math.round(bet * 0.5);
@@ -1384,7 +1436,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino }) {
 
     // 릴이 빠르게 랜덤 심볼로 도는 연출
     const cycleId = setInterval(() => {
-      setDisplayReels((prev) => prev.map((s, i) => (stoppedRef.current[i] ? s : SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)])));
+      setDisplayReels((prev) => prev.map((s, i) => (stoppedRef.current[i] ? s : slotSymbols[Math.floor(Math.random() * slotSymbols.length)])));
     }, 70);
     timersRef.current.push({ id: cycleId, interval: true });
 
@@ -1559,8 +1611,8 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino }) {
         <div style={{ fontSize: 11, color: C.creamDim, lineHeight: 1.8 }}>
           <div style={{ marginBottom: 4, fontWeight: 700, color: C.creamDim }}>배당표 (세 심볼 일치 시 베팅액의 N배)</div>
           <div>
-            {SLOT_SYMBOLS.map((s) => (
-              <span key={s} style={{ marginRight: 12, display: 'inline-block', marginBottom: 4 }}>{s} × {SLOT_PAYOUTS[s]}</span>
+            {slotSymbols.map((s) => (
+              <span key={s} style={{ marginRight: 12, display: 'inline-block', marginBottom: 4 }}>{s} × {slotPayouts[s]}</span>
             ))}
           </div>
           <div style={{ marginTop: 6 }}>두 심볼만 일치하면 베팅액의 절반을 돌려받고, 아무것도 안 맞으면 베팅액 전액을 잃어요.</div>
