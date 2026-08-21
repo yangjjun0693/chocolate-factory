@@ -2478,7 +2478,7 @@ function ConfigPanel({ title, items, onSetConfig }) {
   };
 
   const handleApply = (key) => {
-    onSetGlobalConfig(key, values[key]);
+    onSetConfig(key, values[key]);
   };
 
   return (
