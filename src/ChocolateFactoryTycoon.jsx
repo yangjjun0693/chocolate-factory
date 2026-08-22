@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { createClient } from '@supabase/supabase-js';
 import {
   Factory, Warehouse, ShoppingCart, TrendingUp, Users, LayoutDashboard,
   Lock, Check, Plus, ChevronRight, Sparkles, Coins, Package, Wrench,
   UserPlus, Gauge, Award, ArrowUpCircle, X, Activity, Database, Ban,
-  RotateCcw, Download, Trash2
+  RotateCcw, Download, Trash2, MessageCircle, ClipboardList, Megaphone, Send
 } from 'lucide-react';
 
 /* ---------------------------------------------------------------- */
@@ -105,6 +106,10 @@ const AD_BANNERS = {
 const SUPABASE_URL = 'https://nfahizdxaytdtsuaaqpt.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_9EXf5jstSdFyxmP0sq181A_UjsRPJCw';
 
+// supabase-js 클라이언트 — 글로벌 채팅(Realtime)에만 사용한다. 세이브/로그인 등 기존 로직은
+// 여전히 supabaseRpc(순수 fetch)로 처리하므로 이 클라이언트는 건드리지 않는다.
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 async function supabaseRpc(fn, body) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
@@ -129,12 +134,14 @@ async function supabaseRpc(fn, body) {
 /* ---------------------------------------------------------------- */
 const RESOURCE_META = {
   cacao: { name: '카카오', emoji: '🌰' },
-  sugar: { name: '설탕', emoji: '🧂' },
+  sugar: { name: '설탕', emoji: '🍚' },
   freshMilk: { name: '우유', emoji: '🥛' },
   strawberry: { name: '딸기', emoji: '🍓' },
   blueberry: { name: '블루베리', emoji: '🫐' },
   hazelnut: { name: '헤이즐넛', emoji: '🥜' },
   matcha: { name: '말차가루', emoji: '🍵' },
+  salt: { name: '소금', emoji: '🧂' },
+  coffeeBean: { name: '커피 원두', emoji: '☕' },
 };
 
 // 원재료(RESOURCE_META) 또는 완제품(RECIPES) 어느 쪽이든 재료 아이콘/이름을 찾아주는 헬퍼
@@ -155,6 +162,8 @@ const RECIPES_BASE = [
   { id: 'blueberry', name: '블루베리 초콜릿', emoji: '🫐', tier: 2, ing: { white: 1, blueberry: 2 }, price: 46 },
   { id: 'hazelnut', name: '헤이즐넛 초콜릿', emoji: '🟤', tier: 2, ing: { dark: 1, hazelnut: 2 }, price: 54 },
   { id: 'matcha', name: '말차 초콜릿', emoji: '💚', tier: 2, ing: { white: 1, matcha: 2 }, price: 56 },
+  { id: 'saltyCaramel', name: '솔티캐러멜 초콜릿', emoji: '🧈', tier: 2, ing: { milk: 1, salt: 2 }, price: 52 },
+  { id: 'mocha', name: '모카 초콜릿', emoji: '☕', tier: 2, ing: { dark: 1, coffeeBean: 2 }, price: 58 },
   { id: 'truffle', name: '프리미엄 트러플', emoji: '🍩', tier: 3, ing: { hazelnut: 1, matcha: 1 }, price: 140 },
 ];
 
@@ -185,6 +194,8 @@ const UPGRADES = [
   { id: 'rc_berry2', branch: 'recipe', tier: 2, angleOffset: -25, req: 'rc_berry1', name: '블루베리 조달 계약', desc: '블루베리 초콜릿을 생산할 수 있어요. 화이트 초콜릿 재고를 재료로 소모해요.', cost: 760, effect: { unlock: 'blueberry' } },
   { id: 'rc_nut2', branch: 'recipe', tier: 2, angleOffset: 25, req: 'rc_nut1', name: '말차 조달 계약', desc: '말차 초콜릿을 생산할 수 있어요. 화이트 초콜릿 재고를 재료로 소모해요.', cost: 760, effect: { unlock: 'matcha' } },
   { id: 'rc_truffle', branch: 'recipe', tier: 3, angleOffset: 0, req: ['rc_berry2', 'rc_nut2'], name: '프리미엄 트러플 공방', desc: '트러플을 생산할 수 있어요. 헤이즐넛·말차 초콜릿 재고를 모두 재료로 소모하는 최고급 레시피예요.', cost: 3200, effect: { unlock: 'truffle' } },
+  { id: 'rc_salt1', branch: 'recipe', tier: 2, angleOffset: -55, req: null, name: '소금 조달 계약', desc: '솔티캐러멜 초콜릿을 생산할 수 있어요. 밀크 초콜릿 재고를 재료로 소모해요.', cost: 700, effect: { unlock: 'saltyCaramel' } },
+  { id: 'rc_mocha1', branch: 'recipe', tier: 2, angleOffset: 55, req: null, name: '커피 원두 조달 계약', desc: '모카 초콜릿을 생산할 수 있어요. 다크 초콜릿 재고를 재료로 소모해요.', cost: 700, effect: { unlock: 'mocha' } },
 
   // ── 브랜딩 계열 ──
   { id: 'br1', branch: 'branding', tier: 1, req: null, name: '로컬 마케팅', desc: '모든 판매가 +10%', cost: 260, effect: { priceMult: 0.10 } },
@@ -269,9 +280,10 @@ const staffTraitBonus = (staff, key) => (staff || []).reduce((s, m) => s + ((STA
 
 // 레시피 조각 뽑기로만 얻을 수 있는 히든 초콜릿 (업그레이드 트리와 무관한 별도 콘텐츠)
 const HIDDEN_RECIPES = [
-  { id: 'taco', name: '타코 초콜릿', emoji: '🌮', tier: 2, ing: { dark: 1, sugar: 2 }, price: 90, needFragments: 6, fragmentWeight: 42 },
-  { id: 'coconut', name: '코코넛 초콜릿', emoji: '🥥', tier: 2, ing: { white: 1, freshMilk: 3 }, price: 78, needFragments: 6, fragmentWeight: 42 },
-  { id: 'goldleaf', name: '골드리프 초콜릿', emoji: '⭐', tier: 4, ing: { truffle: 1 }, price: 260, needFragments: 8, fragmentWeight: 16 },
+  { id: 'taco', name: '타코 초콜릿', emoji: '🌮', tier: 2, ing: { dark: 1, sugar: 2 }, price: 90, needFragments: 6, fragmentWeight: 30 },
+  { id: 'coconut', name: '코코넛 초콜릿', emoji: '🥥', tier: 2, ing: { white: 1, freshMilk: 3 }, price: 78, needFragments: 6, fragmentWeight: 30 },
+  { id: 'injeolmi', name: '인절미 초콜릿', emoji: '🍡', tier: 2, ing: { white: 1, sugar: 3 }, price: 88, needFragments: 6, fragmentWeight: 30 },
+  { id: 'goldleaf', name: '골드리프 초콜릿', emoji: '⭐', tier: 4, ing: { truffle: 1 }, price: 260, needFragments: 8, fragmentWeight: 10 },
 ];
 const HIDDEN_RECIPES_MAP = Object.fromEntries(HIDDEN_RECIPES.map((r) => [r.id, r]));
 
@@ -280,6 +292,7 @@ const HIDDEN_RECIPES_MAP = Object.fromEntries(HIDDEN_RECIPES.map((r) => [r.id, r
 const PRESTIGE_RECIPES = [
   { id: 'stardust', name: '스타더스트 초콜릿', emoji: '🌌', tier: 5, ing: { truffle: 1, goldleaf: 1 }, price: 620, requiresPrestige: 1 },
   { id: 'legendary_cacao', name: '레전더리 카카오', emoji: '👑', tier: 6, ing: { stardust: 2 }, price: 1800, requiresPrestige: 5 },
+  { id: 'feastables', name: 'Feastables 초콜릿', emoji: '🟧', tier: 7, ing: { legendary_cacao: 1, stardust: 2 }, price: 5200, requiresPrestige: 7 },
 ];
 
 // 최종 레시피 목록: 기본(RECIPES_BASE) + 뽑기 전용 히든(HIDDEN_RECIPES) + 환생 전용(PRESTIGE_RECIPES)
@@ -421,13 +434,57 @@ const prestigeRequirement = (count) => Math.round(PRESTIGE_BASE_REQUIREMENT * Ma
 const prestigeMultOf = (count) => 1 + count * PRESTIGE_MULT_PER_LEVEL;
 
 /* ---------------------------------------------------------------- */
+/*  일일 / 주간 퀘스트 시스템                                            */
+/*  - 실제 날짜(로컬 시각) 기준으로 자정/주 단위가 바뀌면 진행도가 초기화됨   */
+/*  - 진행도는 게임 틱(생산)과 액션(판매/뽑기/업그레이드)에서 누적된다      */
+/* ---------------------------------------------------------------- */
+const QUEST_DEFS = {
+  daily: [
+    { id: 'd_produce', name: '초콜릿 생산왕', desc: '초콜릿을 50개 생산하세요', metric: 'produce', target: 50, reward: { gachaCoins: 2 } },
+    { id: 'd_sell', name: '오늘의 장사', desc: '초콜릿을 30개 판매하세요', metric: 'sell', target: 30, reward: { money: 800 } },
+    { id: 'd_gacha', name: '뽑기 한 판', desc: '뽑기를 3회 이용하세요', metric: 'gacha', target: 3, reward: { gachaCoins: 1 } },
+  ],
+  weekly: [
+    { id: 'w_produce', name: '주간 생산 목표', desc: '초콜릿을 500개 생산하세요', metric: 'produce', target: 500, reward: { gachaCoins: 8 } },
+    { id: 'w_revenue', name: '주간 매출 목표', desc: '누적 매출 10,000$를 달성하세요', metric: 'revenueAmount', target: 10000, reward: { gachaCoins: 10 } },
+    { id: 'w_upgrade', name: '연구 개발 주간', desc: '업그레이드를 2개 구매하세요', metric: 'upgrade', target: 2, reward: { money: 3000 } },
+  ],
+};
+const todayKey = () => new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+function weekKey(d = new Date()) {
+  const oneJan = new Date(d.getFullYear(), 0, 1);
+  const dayOfYear = Math.floor((d - oneJan) / 86400000);
+  return `${d.getFullYear()}-W${Math.floor((dayOfYear + oneJan.getDay()) / 7)}`;
+}
+const initialQuests = () => ({ dailyKey: null, weeklyKey: null, dailyProgress: {}, weeklyProgress: {}, dailyClaimed: [], weeklyClaimed: [] });
+// 날짜/주가 바뀌었으면 해당 범위 진행도·수령 목록을 초기화한다
+function ensureQuestPeriod(q) {
+  const dKey = todayKey();
+  const wKey = weekKey();
+  let next = q || initialQuests();
+  if (next.dailyKey !== dKey) next = { ...next, dailyKey: dKey, dailyProgress: {}, dailyClaimed: [] };
+  if (next.weeklyKey !== wKey) next = { ...next, weeklyKey: wKey, weeklyProgress: {}, weeklyClaimed: [] };
+  return next;
+}
+// metric에 해당하는 일일/주간 퀘스트 진행도를 amount만큼 누적한다
+function bumpQuest(q, metric, amount) {
+  if (!amount) return ensureQuestPeriod(q);
+  const quests = ensureQuestPeriod(q);
+  const dailyProgress = { ...quests.dailyProgress };
+  QUEST_DEFS.daily.forEach((qd) => { if (qd.metric === metric) dailyProgress[qd.id] = (dailyProgress[qd.id] || 0) + amount; });
+  const weeklyProgress = { ...quests.weeklyProgress };
+  QUEST_DEFS.weekly.forEach((qd) => { if (qd.metric === metric) weeklyProgress[qd.id] = (weeklyProgress[qd.id] || 0) + amount; });
+  return { ...quests, dailyProgress, weeklyProgress };
+}
+
+/* ---------------------------------------------------------------- */
 /*  초기 상태                                                         */
 /* ---------------------------------------------------------------- */
 const initialGame = () => ({
   started: false,
   money: 500,
-  resources: { cacao: 100, sugar: 100, freshMilk: 80, strawberry: 0, blueberry: 0, hazelnut: 0, matcha: 0 },
-  prices: { cacao: 4, sugar: 2, freshMilk: 3, strawberry: 6, blueberry: 6, hazelnut: 7, matcha: 8 },
+  resources: { cacao: 100, sugar: 100, freshMilk: 80, strawberry: 0, blueberry: 0, hazelnut: 0, matcha: 0, salt: 0, coffeeBean: 0 },
+  prices: { cacao: 4, sugar: 2, freshMilk: 3, strawberry: 6, blueberry: 6, hazelnut: 7, matcha: 8, salt: 3, coffeeBean: 9 },
   warehouse: {},
   warehouseCap: 220,
   debt: 0,
@@ -456,6 +513,7 @@ const initialGame = () => ({
   inventory: { fragments: {}, buffs: {} },
   activeBuffs: [],
   prestigeCount: 0,
+  quests: initialQuests(),
   toast: null,
 });
 
@@ -663,8 +721,14 @@ export default function ChocolateFactoryTycoon() {
     toastTimer.current = setTimeout(() => setG((prev) => ({ ...prev, toast: null })), 2200);
   }, []);
 
-  const handleAuth = useCallback(({ id, username, password, data }) => {
-    setPlayer({ id, username, password, guest: false });
+  // 전설 등급 뽑기 / 카지노 잭팟을 글로벌 채팅에 자동으로 알린다 (type='legendary'|'jackpot').
+  // 실패해도 게임 진행에는 영향이 없어야 하므로 결과를 기다리지 않고 조용히 무시한다.
+  const broadcastChatEvent = useCallback((type, message) => {
+    supabaseClient.from('chat_messages').insert({ username: '공지', message, type }).then(() => {}, () => {});
+  }, []);
+
+  const handleAuth = useCallback(({ id, username, password, data, isAdmin }) => {
+    setPlayer({ id, username, password, guest: false, admin: !!isAdmin });
     // 서버에 저장된 세이브가 있으면 $러오고, 없으면(신규 가입) 기본값 유지
     if (data && Object.keys(data).length > 0) {
       setG((prev) => {
@@ -795,6 +859,9 @@ export default function ChocolateFactoryTycoon() {
         let totalRevenue = prev.totalRevenue;
         let gachaCoins = prev.gachaCoins;
         let debt = prev.debt > 0 ? prev.debt * (1 + cfg('loanInterestRate', LOAN_INTEREST_RATE)) : prev.debt;
+        let producedDelta = 0;
+        let autoSoldDelta = 0;
+        let autoRevenueDelta = 0;
 
         const lines = prev.lines.map((line) => {
           const recipe = RECIPES.find((r) => r.id === line.recipeId);
@@ -833,10 +900,13 @@ export default function ChocolateFactoryTycoon() {
               });
               progress = 0;
               totalProduced += 1;
+              producedDelta += 1;
               if (prev.autoSell) {
                 const sellPrice = recipe.price * priceMult * staffRevMult;
                 money += sellPrice;
                 totalRevenue += sellPrice;
+                autoSoldDelta += 1;
+                autoRevenueDelta += sellPrice;
                 if (Math.random() < 0.08) gachaCoins += 1;
               } else {
                 warehouse[recipe.id] = (warehouse[recipe.id] || 0) + 1;
@@ -866,7 +936,12 @@ export default function ChocolateFactoryTycoon() {
           unlockedRecipes = [...prev.unlockedRecipes, ...missingPrestigeRecipes.map((r) => r.id)];
         }
 
-        return { ...prev, resources, warehouse, money, lines, history, totalProduced, totalRevenue, achievements, debt, tick, activeBuffs, gachaCoins, unlockedRecipes };
+        let quests = ensureQuestPeriod(prev.quests);
+        if (producedDelta > 0) quests = bumpQuest(quests, 'produce', producedDelta);
+        if (autoSoldDelta > 0) quests = bumpQuest(quests, 'sell', autoSoldDelta);
+        if (autoRevenueDelta > 0) quests = bumpQuest(quests, 'revenueAmount', autoRevenueDelta);
+
+        return { ...prev, resources, warehouse, money, lines, history, totalProduced, totalRevenue, achievements, debt, tick, activeBuffs, gachaCoins, unlockedRecipes, quests };
       });
     }, cfg('gameTickInterval', 1000));
     return () => clearInterval(iv);
@@ -903,12 +978,15 @@ export default function ChocolateFactoryTycoon() {
       const staffRevMult = getStaffRevenueMult(prev.staff, prev.lines, cfg("staffRevenueBonusPerLevel", STAFF_REVENUE_PER_LEVEL * 100) / 100, cfg("staffRevenueBonusCap", STAFF_REVENUE_CAP * 100) / 100);
       const revenue = recipe.price * priceMult * staffRevMult * sellAmt;
       const gotCoin = Math.random() < 0.08;
+      let quests = bumpQuest(prev.quests, 'sell', sellAmt);
+      quests = bumpQuest(quests, 'revenueAmount', revenue);
       return {
         ...prev,
         money: prev.money + revenue,
         totalRevenue: prev.totalRevenue + revenue,
         warehouse: { ...prev.warehouse, [recipeId]: have - sellAmt },
         gachaCoins: prev.gachaCoins + (gotCoin ? 1 : 0),
+        quests,
       };
     });
   };
@@ -991,7 +1069,7 @@ export default function ChocolateFactoryTycoon() {
       const reqMet = reqIdsOf(up).every((id) => prev.upgrades.includes(id));
       if (!reqMet) { pushToast('선행 업그레이드가 필요해요', 'berry'); return prev; }
       if (prev.money < cost) { pushToast('자금이 부족해요', 'berry'); return prev; }
-      let next = { ...prev, money: prev.money - cost, upgrades: [...prev.upgrades, up.id] };
+      let next = { ...prev, money: prev.money - cost, upgrades: [...prev.upgrades, up.id], quests: bumpQuest(prev.quests, 'upgrade', 1) };
       if (up.effect.warehouse) next.warehouseCap += effectFor(up.id, 'warehouse');
       if (up.effect.unlock) next.unlockedRecipes = [...prev.unlockedRecipes, up.effect.unlock];
       return next;
@@ -1033,9 +1111,13 @@ export default function ChocolateFactoryTycoon() {
         gachaCoins: prev.gachaCoins - cost,
         gachaPullCount: (prev.gachaPullCount || 0) + 1,
         staff: [...prev.staff, member],
+        quests: bumpQuest(prev.quests, 'gacha', 1),
       }));
       const traitNote = STAFF_TRAITS[rarity] ? ` · 특성 [${STAFF_TRAITS[rarity].label}] 상시 발동!` : '';
       pushToast(`🎉 [${RARITY_INFO[rarity].label}] ${name}(${ROLES[role].label}) 직원을 얻었어요!${traitNote}`, rarity === 'legendary' ? 'gold' : 'pistachio');
+      if (rarity === 'legendary') {
+        broadcastChatEvent('legendary', `🎉 ${player?.username || '누군가'}님이 전설 등급 직원 [${name}]을(를) 뽑았어요!`);
+      }
     } else if (kind === 'fragment') {
       const id = weightedPick(HIDDEN_RECIPES.map((r) => ({ key: r.id, weight: r.fragmentWeight })));
       const recipe = HIDDEN_RECIPES_MAP[id];
@@ -1044,6 +1126,7 @@ export default function ChocolateFactoryTycoon() {
         gachaCoins: prev.gachaCoins - cost,
         gachaPullCount: (prev.gachaPullCount || 0) + 1,
         inventory: { ...prev.inventory, fragments: { ...prev.inventory.fragments, [id]: (prev.inventory.fragments[id] || 0) + 1 } },
+        quests: bumpQuest(prev.quests, 'gacha', 1),
       }));
       pushToast(`🧩 ${recipe.emoji} ${recipe.name} 조각을 얻었어요!`, 'gold');
     } else if (kind === 'buff') {
@@ -1054,8 +1137,12 @@ export default function ChocolateFactoryTycoon() {
         gachaCoins: prev.gachaCoins - cost,
         gachaPullCount: (prev.gachaPullCount || 0) + 1,
         inventory: { ...prev.inventory, buffs: { ...prev.inventory.buffs, [item.id]: (prev.inventory.buffs[item.id] || 0) + 1 } },
+        quests: bumpQuest(prev.quests, 'gacha', 1),
       }));
       pushToast(`✨ [${RARITY_INFO[rarity].label}] ${item.emoji} ${item.name}을(를) 얻었어요!`, rarity === 'legendary' ? 'gold' : 'pistachio');
+      if (rarity === 'legendary') {
+        broadcastChatEvent('legendary', `🎉 ${player?.username || '누군가'}님이 전설 등급 아이템 [${item.name}]을(를) 뽑았어요!`);
+      }
     }
   };
 
@@ -1107,9 +1194,37 @@ export default function ChocolateFactoryTycoon() {
       casinoJackpotCount: prev.casinoJackpotCount + (outcome === 'jackpot' ? 1 : 0),
       gachaCoins: prev.gachaCoins + (outcome === 'jackpot' ? 1 : 0),
     }));
-    if (outcome === 'jackpot') pushToast(`🎰 트리플 매치! +${fmt(payout)}$ · 🎟️+1`, 'gold');
+    if (outcome === 'jackpot') {
+      pushToast(`🎰 트리플 매치! +${fmt(payout)}$ · 🎟️+1`, 'gold');
+      broadcastChatEvent('jackpot', `🎰 ${player?.username || '누군가'}님이 카지노 잭팟을 터뜨렸어요! (+${fmt(payout)}$)`);
+    }
     else if (outcome === 'partial') pushToast('🎰 페어 — 베팅 절반 회수', 'pistachio');
     else pushToast(`🎰 꽝... -${fmt(bet)}$`, 'berry');
+  };
+
+  /* ---------------- 퀘스트 보상 수령 ---------------- */
+  const claimQuest = (scope, questId) => {
+    setG((prev) => {
+      const defs = scope === 'daily' ? QUEST_DEFS.daily : QUEST_DEFS.weekly;
+      const qd = defs.find((q) => q.id === questId);
+      if (!qd) return prev;
+      let quests = ensureQuestPeriod(prev.quests);
+      const claimedList = scope === 'daily' ? quests.dailyClaimed : quests.weeklyClaimed;
+      if (claimedList.includes(questId)) return prev;
+      const progress = (scope === 'daily' ? quests.dailyProgress : quests.weeklyProgress)[questId] || 0;
+      if (progress < qd.target) return prev;
+      const reward = qd.reward || {};
+      quests = scope === 'daily'
+        ? { ...quests, dailyClaimed: [...quests.dailyClaimed, questId] }
+        : { ...quests, weeklyClaimed: [...quests.weeklyClaimed, questId] };
+      return {
+        ...prev,
+        money: prev.money + (reward.money || 0),
+        gachaCoins: prev.gachaCoins + (reward.gachaCoins || 0),
+        quests,
+      };
+    });
+    pushToast('🎁 퀘스트 보상을 받았어요!', 'gold');
   };
 
   /* ---------------- 렌더 ---------------- */
@@ -1138,10 +1253,12 @@ export default function ChocolateFactoryTycoon() {
     { id: 'staff', label: '직원 관리', icon: Users },
     { id: 'gacha', label: '뽑기', icon: Sparkles },
     { id: 'inventory', label: '인벤토리', icon: Package },
+    { id: 'quest', label: '퀘스트', icon: ClipboardList },
     { id: 'finance', label: '대출 & 카지노', icon: Coins },
     { id: 'dashboard', label: '대시보드', icon: LayoutDashboard },
     { id: 'achievements', label: '도전과제', icon: Award },
     { id: 'leaderboard', label: '랭킹', icon: TrendingUp },
+    { id: 'chat', label: '채팅', icon: MessageCircle },
   ];
 
   return (
@@ -1268,10 +1385,12 @@ export default function ChocolateFactoryTycoon() {
         {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} levelUpStaff={levelUpStaff} staffRevMult={staffRevMult} cfg={cfg} />}
         {tab === 'gacha' && <GachaTab g={g} pullGacha={pullGacha} buyGachaCoin={buyGachaCoin} />}
         {tab === 'inventory' && <InventoryTab g={g} useBuffItem={useBuffItem} assembleRecipe={assembleRecipe} />}
+        {tab === 'quest' && <QuestTab g={g} claimQuest={claimQuest} />}
         {tab === 'finance' && <FinanceTab g={g} takeLoan={takeLoan} repayLoan={repayLoan} resolveCasino={resolveCasino} jackpotRate={jackpotRate} cfg={cfg} />}
         {tab === 'dashboard' && <DashboardTab g={g} resetGame={resetGame} doPrestige={doPrestige} />}
         {tab === 'achievements' && <AchievementsTab g={g} />}
         {tab === 'leaderboard' && <LeaderboardTab currentUsername={player.username} currentMoney={g.money} />}
+        {tab === 'chat' && <ChatTab player={player} pushToast={pushToast} />}
       </div>
 
       {/* 토스트 */}
@@ -1322,7 +1441,7 @@ function AuthScreen({ onAuth, onGuest }) {
       const rows = await supabaseRpc(fn, { p_username: username.trim(), p_password: password });
       const row = Array.isArray(rows) ? rows[0] : rows;
       if (!row || !row.player_id) throw new Error('처리 중 문제가 생겼어요');
-      onAuth({ id: row.player_id, username: username.trim(), password, data: row.data || null });
+      onAuth({ id: row.player_id, username: username.trim(), password, data: row.data || null, isAdmin: !!row.is_admin });
     } catch (err) {
       setError(err.message || '문제가 생겼어요. 다시 시도해주세요');
     } finally {
@@ -2657,6 +2776,165 @@ function LeaderboardTab({ currentUsername, currentMoney }) {
     </div>
   );
 }
+
+/* ---------------------------------------------------------------- */
+/*  일일 / 주간 퀘스트 탭                                                */
+/* ---------------------------------------------------------------- */
+function QuestCard({ q, progress, claimed, onClaim }) {
+  const done = progress >= q.target;
+  const rewardLabel = q.reward.gachaCoins ? `🎟️ ${q.reward.gachaCoins}개` : `💰 ${fmt(q.reward.money)}$`;
+  return (
+    <Panel className="ftc-fade-in" style={{ padding: 14, opacity: claimed ? 0.55 : 1, borderColor: done && !claimed ? C.gold : C.line }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 14 }}>{q.name}</div>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.gold, whiteSpace: 'nowrap' }}>{rewardLabel}</span>
+      </div>
+      <div style={{ fontSize: 11.5, color: C.creamDim, marginBottom: 10 }}>{q.desc}</div>
+      <ProgressBar pct={(progress / q.target) * 100} color={done ? C.pistachio : C.caramel} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+        <span style={{ fontSize: 11, color: C.creamDim, fontFamily: "'JetBrains Mono', monospace" }}>{fmt(Math.min(progress, q.target))} / {fmt(q.target)}</span>
+        <Btn small variant={done && !claimed ? 'gold' : 'ghost'} disabled={!done || claimed} onClick={onClaim}>
+          {claimed ? <><Check size={12} /> 수령완료</> : '보상받기'}
+        </Btn>
+      </div>
+    </Panel>
+  );
+}
+function QuestTab({ g, claimQuest }) {
+  const quests = g.quests || initialQuests();
+  return (
+    <div>
+      <SectionTitle eyebrow="Missions" title="퀘스트" />
+      <div style={{ fontSize: 11, letterSpacing: 1.5, color: C.creamDim, marginBottom: 10, textTransform: 'uppercase' }}>일일 퀘스트</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px,1fr))', gap: 10, marginBottom: 26 }}>
+        {QUEST_DEFS.daily.map((q) => (
+          <QuestCard
+            key={q.id}
+            q={q}
+            progress={quests.dailyProgress[q.id] || 0}
+            claimed={quests.dailyClaimed.includes(q.id)}
+            onClaim={() => claimQuest('daily', q.id)}
+          />
+        ))}
+      </div>
+      <div style={{ fontSize: 11, letterSpacing: 1.5, color: C.creamDim, marginBottom: 10, textTransform: 'uppercase' }}>주간 퀘스트</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px,1fr))', gap: 10 }}>
+        {QUEST_DEFS.weekly.map((q) => (
+          <QuestCard
+            key={q.id}
+            q={q}
+            progress={quests.weeklyProgress[q.id] || 0}
+            claimed={quests.weeklyClaimed.includes(q.id)}
+            onClaim={() => claimQuest('weekly', q.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  글로벌 채팅 탭                                                      */
+/*  - Supabase Realtime(postgres_changes)으로 chat_messages 테이블의    */
+/*    INSERT를 구독한다. 일반 메시지는 규칙 없이 자유롭게(모더레이션은     */
+/*    운영자가 직접) 보낼 수 있고, admin=true 계정은 공지를 보낼 수 있다.  */
+/* ---------------------------------------------------------------- */
+const CHAT_TYPE_STYLE = {
+  user: { bg: 'transparent', border: C.line, label: null },
+  legendary: { bg: 'rgba(234,193,58,0.12)', border: C.gold, label: '🎉 전설' },
+  jackpot: { bg: 'rgba(234,193,58,0.12)', border: C.gold, label: '🎰 잭팟' },
+  announcement: { bg: 'rgba(176,71,95,0.14)', border: C.berry, label: '📢 공지' },
+};
+function ChatTab({ player, pushToast }) {
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState('');
+  const [announceMode, setAnnounceMode] = useState(false);
+  const [sending, setSending] = useState(false);
+  const listRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await supabaseClient.from('chat_messages').select('*').order('id', { ascending: false }).limit(50);
+      if (active && data) setMessages(data.slice().reverse());
+    })();
+    const channel = supabaseClient
+      .channel('chat_messages_live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+        setMessages((prev) => [...prev, payload.new].slice(-200));
+      })
+      .subscribe();
+    return () => { active = false; supabaseClient.removeChannel(channel); };
+  }, []);
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [messages]);
+
+  const send = async () => {
+    const msg = text.trim();
+    if (!msg || sending) return;
+    setSending(true);
+    try {
+      if (announceMode) {
+        await supabaseRpc('admin_broadcast', { p_admin_id: player.id, p_admin_password: player.password, p_message: msg });
+      } else {
+        const { error } = await supabaseClient.from('chat_messages').insert({ username: player?.username || '익명', message: msg, type: 'user' });
+        if (error) throw error;
+      }
+      setText('');
+    } catch (err) {
+      pushToast(err.message || '메시지 전송에 실패했어요', 'berry');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div>
+      <SectionTitle eyebrow="Global Chat" title="글로벌 채팅" right={<span style={{ fontSize: 11, color: C.creamDim }}>실시간 · 별도 규칙 없음(운영자가 직접 모더레이션)</span>} />
+      <Panel style={{ padding: 0, overflow: 'hidden', marginBottom: 12 }}>
+        <div ref={listRef} style={{ height: 420, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {messages.length === 0 && (
+            <div style={{ color: C.creamDim, fontSize: 13, textAlign: 'center', marginTop: 20 }}>아직 메시지가 없어요. 첫 메시지를 남겨보세요!</div>
+          )}
+          {messages.map((m) => {
+            const style = CHAT_TYPE_STYLE[m.type] || CHAT_TYPE_STYLE.user;
+            return (
+              <div key={m.id} style={{ background: style.bg, border: `1px solid ${style.border}`, borderRadius: 10, padding: '8px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                  {style.label && <span style={{ fontSize: 10, fontWeight: 700, color: style.border }}>{style.label}</span>}
+                  <span style={{ fontSize: 12, fontWeight: 700, color: C.cream }}>{m.username}</span>
+                  <span style={{ fontSize: 9.5, color: C.creamDim }}>{new Date(m.created_at).toLocaleTimeString('ko-KR')}</span>
+                </div>
+                <div style={{ fontSize: 13, color: C.cream, lineHeight: 1.5, wordBreak: 'break-word' }}>{m.message}</div>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {player?.admin && (
+          <Btn small variant={announceMode ? 'gold' : 'ghost'} onClick={() => setAnnounceMode((v) => !v)}>
+            <Megaphone size={13} /> 공지
+          </Btn>
+        )}
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && send()}
+          maxLength={300}
+          placeholder={announceMode ? '전체 공지 메시지를 입력하세요...' : '메시지를 입력하세요...'}
+          style={{ flex: 1, minWidth: 0, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${announceMode ? C.berry : C.line}`, borderRadius: 9, padding: '10px 12px', fontSize: 13 }}
+        />
+        <Btn variant={announceMode ? 'danger' : 'gold'} disabled={sending || !text.trim()} onClick={send}>
+          <Send size={14} /> 전송
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- */
 /*  관리자 패널                                                        */
 /*  - 조회(플레이어 목록/상세/통계) · 조작(자금 지급/차감, 광고 on-off,    */
