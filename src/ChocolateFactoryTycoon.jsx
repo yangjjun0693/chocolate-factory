@@ -339,17 +339,19 @@ const STAFF_MAX_LEVEL = 10;
 
 // 생산직 보너스: 라인에 배정된 생산직의 레벨은 그 라인 속도(staffBoost)뿐 아니라
 // "생산 라인 속도가 0초에 수렴해도" 계속 의미가 있도록 전체 판매 수익에도 보너스를 준다.
-const STAFF_REVENUE_PER_LEVEL = 0.03; // 배정된 생산직 레벨 1당 판매 수익 +3%
-const STAFF_REVENUE_CAP = 1.0; // 최대 +100%
-function getStaffRevenueMult(staff, lines) {
+// perLevel/cap은 관리자 설정(staffRevenueBonusPerLevel/staffRevenueBonusCap, %)에서 온 값 —
+// 모듈 스코프 함수라 컴포넌트의 cfg()에 직접 접근할 수 없어 호출부에서 인자로 넘겨받는다.
+const STAFF_REVENUE_PER_LEVEL = 0.03; // 폴백 기본값: 레벨 1당 판매 수익 +3%
+const STAFF_REVENUE_CAP = 1.0; // 폴백 기본값: 최대 +100%
+function getStaffRevenueMult(staff, lines, perLevel = STAFF_REVENUE_PER_LEVEL, cap = STAFF_REVENUE_CAP) {
   const bonus = lines.reduce((sum, l) => {
     const st = staff.find((s) => s.id === l.staffId && s.role === 'production');
-    return sum + (st ? st.level * STAFF_REVENUE_PER_LEVEL * (st.bonusMult || 1) : 0);
+    return sum + (st ? st.level * perLevel * (st.bonusMult || 1) : 0);
   }, 0);
-  return 1 + Math.min(STAFF_REVENUE_CAP, bonus);
+  return 1 + Math.min(cap, bonus);
 }
 
-// 대출 시스템
+// 대출 시스템 — 아래 값들은 관리자 설정이 없을 때의 폴백 기본값
 const LOAN_INTEREST_RATE = 0.0008; // 초당 복리 이자율
 const MAX_DEBT = 6000;
 const LOAN_OPTIONS = [300, 1000, 3000];
@@ -616,18 +618,34 @@ export default function ChocolateFactoryTycoon() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // ---- 카지노 잭팟 확률 (관리자 패널의 "게임 설정"에서 서버에 저장한 값을 $러온다) ----
+  // ---- 게임 설정 (관리자 패널의 "게임 설정"에서 서버에 저장한 값을 가져온다) ----
   // 이 값은 민감 정보가 아니라 게임 밸런스 설정이라 apikey만으로 조회 가능하다.
   const [jackpotRate, setJackpotRate] = useState(3); // 기본값 3%
+  const [gameConfig, setGameConfig] = useState({}); // admin_get_config가 준 원본(문자열) 값들
+  const cfgRef = useRef({});
+  useEffect(() => { cfgRef.current = gameConfig; }, [gameConfig]);
+  // cfg('key', fallback): 관리자가 값을 설정 안 했거나 파싱 불가능하면 fallback(기존 기본값) 사용.
+  // setG 업데이터/게임 틱처럼 컴포넌트 함수 내부 어디서든 최신 값을 읽을 수 있도록 ref를 사용한다.
+  const cfg = (key, fallback) => {
+    const raw = cfgRef.current[key];
+    if (raw === undefined || raw === null || raw === '') return fallback;
+    if (typeof fallback === 'boolean') return raw === true || raw === 'true';
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : fallback;
+  };
   useEffect(() => {
     const fetchConfig = async () => {
       try {
         const data = await supabaseRpc('admin_get_config', {});
-        if (data && data.slotJackpotBaseRate) setJackpotRate(Number(data.slotJackpotBaseRate));
-      } catch (e) { /* 설정을 못 $러오면 기본값(3%) 유지 */ }
+        if (data) {
+          setGameConfig(data);
+          if (data.slotJackpotBaseRate) setJackpotRate(Number(data.slotJackpotBaseRate));
+        }
+      } catch (e) { /* 설정을 못 가져오면 기본값 유지 */ }
     };
     fetchConfig();
-    // 관리자 패널에서 확률을 바꾼 직후 즉시 반영할 수 있도록 새로고침 함수를 노출
+    // 관리자 패널에서 값을 바꾼 직후 즉시 반영할 수 있도록 새로고침 함수를 노출.
+    // 이름은 예전 그대로(__refreshJackpotConfig) 유지해서 admin panel 쪽 호출부와 호환.
     window.__refreshJackpotConfig = fetchConfig;
     return () => { delete window.__refreshJackpotConfig; };
   }, []);
@@ -676,7 +694,7 @@ export default function ChocolateFactoryTycoon() {
   // 게스트 모드: 회원가입/로그인 없이 즉시 시작. 서버에 아무것도 저장되지 않는다.
   const startGuest = useCallback(() => {
     setPlayer({ id: null, username: '게스트', password: null, guest: true });
-    setG(initialGame());
+    setG({ ...initialGame(), warehouseCap: cfg('warehouseBaseCap', 220) });
     pushToast('게스트로 시작해요 (진행 상황은 저장되지 않아요)', 'pistachio');
   }, [pushToast]);
 
@@ -701,7 +719,7 @@ export default function ChocolateFactoryTycoon() {
   }, [player, saveNow]);
 
   const resetGame = useCallback(() => {
-    const fresh = initialGame();
+    const fresh = { ...initialGame(), warehouseCap: cfg('warehouseBaseCap', 220) };
     setG(fresh);
     if (player && !player.guest) {
       const { toast, ...saveable } = fresh;
@@ -718,7 +736,7 @@ export default function ChocolateFactoryTycoon() {
       const nextCount = (prev.prestigeCount || 0) + 1;
       if (nextCount > MAX_PRESTIGE) return prev;
       if (prev.money < prestigeRequirement(prev.prestigeCount || 0)) return prev;
-      const fresh = initialGame();
+      const fresh = { ...initialGame(), warehouseCap: cfg('warehouseBaseCap', 220) };
       return {
         ...fresh,
         started: true,
@@ -738,12 +756,25 @@ export default function ChocolateFactoryTycoon() {
     pushToast(`🌟 환생 완료! 판매가 영구 +${Math.round(PRESTIGE_MULT_PER_LEVEL * 100)}%`, 'gold');
   }, [pushToast]);
 
-  // 20초마다 자동 저장 (로그인 + 게임 시작 상태일 때만, 게스트는 제외)
+  // 자동 저장 (로그인 + 게임 시작 상태일 때만, 게스트는 제외). 간격은 관리자 설정(autoSaveInterval)을
+  // 따르되, gameConfig가 바뀌면(관리자가 값 변경 후 새로고침) 인터벌을 다시 만들어 즉시 반영한다.
   useEffect(() => {
     if (!player || player.guest || !g.started) return;
-    const iv = setInterval(saveNow, 20000);
+    const iv = setInterval(saveNow, cfg('autoSaveInterval', 20000));
     return () => clearInterval(iv);
-  }, [player, g.started, saveNow]);
+  }, [player, g.started, saveNow, gameConfig]);
+
+  // effectFor: 업그레이드 효과값을 읽을 때, 관리자 설정에 대응하는 특정 업그레이드(ef1/br2/wh1/wh2)면
+  // 그 설정값으로 덮어쓰고, 아니면 UPGRADES 배열에 정의된 원래 값을 그대로 쓴다.
+  const effectFor = (upgradeId, key) => {
+    const u = UPGRADES.find((x) => x.id === upgradeId);
+    const base = (u && u.effect && u.effect[key]) || 0;
+    if (upgradeId === 'ef1' && key === 'ingSave') return cfg('ingredientSaveBonus', base * 100) / 100;
+    if (upgradeId === 'br2' && key === 'priceMult') return cfg('premiumBrandingBonus', base * 100) / 100;
+    if (upgradeId === 'wh1' && key === 'warehouse') return cfg('warehouseUpgrade1', base);
+    if (upgradeId === 'wh2' && key === 'warehouse') return cfg('warehouseUpgrade2', base);
+    return base;
+  };
 
   /* ---------------- 게임 틱 ---------------- */
   useEffect(() => {
@@ -752,10 +783,10 @@ export default function ChocolateFactoryTycoon() {
       setG((prev) => {
         const tick = prev.tick + 1;
         const activeBuffs = (prev.activeBuffs || []).filter((b) => b.expiresAtTick > tick);
-        const speedBonus = prev.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.speed || 0), 0) + buffBonus({ activeBuffs }, 'speed');
-        const ingSave = prev.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.ingSave || 0), 0);
-        const priceMult = (1 + prev.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.priceMult || 0), 0) + buffBonus({ activeBuffs }, 'priceMult') + staffTraitBonus(prev.staff, 'priceMultFlat')) * prestigeMultOf(prev.prestigeCount || 0);
-        const staffRevMult = getStaffRevenueMult(prev.staff, prev.lines);
+        const speedBonus = prev.upgrades.reduce((s, id) => s + effectFor(id, 'speed'), 0) + buffBonus({ activeBuffs }, 'speed');
+        const ingSave = prev.upgrades.reduce((s, id) => s + effectFor(id, 'ingSave'), 0);
+        const priceMult = (1 + prev.upgrades.reduce((s, id) => s + effectFor(id, 'priceMult'), 0) + buffBonus({ activeBuffs }, 'priceMult') + staffTraitBonus(prev.staff, 'priceMultFlat')) * prestigeMultOf(prev.prestigeCount || 0) * cfg('recipePriceMult', 1);
+        const staffRevMult = getStaffRevenueMult(prev.staff, prev.lines, cfg("staffRevenueBonusPerLevel", STAFF_REVENUE_PER_LEVEL * 100) / 100, cfg("staffRevenueBonusCap", STAFF_REVENUE_CAP * 100) / 100);
 
         let resources = { ...prev.resources };
         let warehouse = { ...prev.warehouse };
@@ -763,14 +794,14 @@ export default function ChocolateFactoryTycoon() {
         let totalProduced = prev.totalProduced;
         let totalRevenue = prev.totalRevenue;
         let gachaCoins = prev.gachaCoins;
-        let debt = prev.debt > 0 ? prev.debt * (1 + LOAN_INTEREST_RATE) : prev.debt;
+        let debt = prev.debt > 0 ? prev.debt * (1 + cfg('loanInterestRate', LOAN_INTEREST_RATE)) : prev.debt;
 
         const lines = prev.lines.map((line) => {
           const recipe = RECIPES.find((r) => r.id === line.recipeId);
           if (!recipe) return line;
           const staffMember = prev.staff.find((s) => s.id === line.staffId);
-          const staffBoost = staffMember ? staffMember.level * 9 * (staffMember.bonusMult || 1) : 0;
-          const speed = (20 + line.level * 6) * (1 + speedBonus) + staffBoost;
+          const staffBoost = staffMember ? staffMember.level * cfg('staffProductionBoostPerLevel', 9) * (staffMember.bonusMult || 1) : 0;
+          const speed = ((cfg('baseProductionSpeed', 20) + line.level * cfg('productionPerLevel', 6)) * (1 + speedBonus) + staffBoost) * cfg('productionSpeedMult', 1);
           let progress = line.progress + speed;
           let blocked = false;
           let blockedReason = null;
@@ -780,6 +811,7 @@ export default function ChocolateFactoryTycoon() {
             let canProduce = true;
             Object.entries(recipe.ing).forEach(([k, v]) => {
               // 재료가 원재료(RESOURCE_META)인지, 창고에 쌓인 완제품(하위 티어 초콜릿)인지 구분
+
               const isProductIngredient = !RESOURCE_META[k];
               // 원재료 절감 업그레이드는 "기본 초콜릿 3종(tier 1)"의 원재료에만 적용
               const amt = isProductIngredient || recipe.tier !== 1 ? v : v * (1 - ingSave);
@@ -836,9 +868,9 @@ export default function ChocolateFactoryTycoon() {
 
         return { ...prev, resources, warehouse, money, lines, history, totalProduced, totalRevenue, achievements, debt, tick, activeBuffs, gachaCoins, unlockedRecipes };
       });
-    }, 1000);
+    }, cfg('gameTickInterval', 1000));
     return () => clearInterval(iv);
-  }, [g.started]);
+  }, [g.started, gameConfig]);
 
   const prevAchRef = useRef([]);
   useEffect(() => {
@@ -855,7 +887,7 @@ export default function ChocolateFactoryTycoon() {
     setG((prev) => {
       // prices[key]가 undefined면 cost가 NaN이 되고, "money < NaN"은 항상 false라서
       // 자금 부족 체크를 그냥 통과해버려 money 전체가 NaN으로 오염된다. 0 폴백으로 방지.
-      const cost = (prev.prices[key] || 0) * amount;
+      const cost = (prev.prices[key] || 0) * amount * cfg('ingredientCostMult', 1);
       if (prev.money < cost) { pushToast('자금이 부족해요', 'berry'); return prev; }
       return { ...prev, money: prev.money - cost, resources: { ...prev.resources, [key]: (prev.resources[key] || 0) + amount } };
     });
@@ -867,8 +899,8 @@ export default function ChocolateFactoryTycoon() {
       const sellAmt = Math.min(have, amount);
       if (sellAmt <= 0) return prev;
       const recipe = RECIPES.find((r) => r.id === recipeId);
-      const priceMult = (1 + prev.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.priceMult || 0), 0) + buffBonus(prev, 'priceMult') + staffTraitBonus(prev.staff, 'priceMultFlat')) * prestigeMultOf(prev.prestigeCount || 0);
-      const staffRevMult = getStaffRevenueMult(prev.staff, prev.lines);
+      const priceMult = (1 + prev.upgrades.reduce((s, id) => s + effectFor(id, 'priceMult'), 0) + buffBonus(prev, 'priceMult') + staffTraitBonus(prev.staff, 'priceMultFlat')) * prestigeMultOf(prev.prestigeCount || 0) * cfg('recipePriceMult', 1);
+      const staffRevMult = getStaffRevenueMult(prev.staff, prev.lines, cfg("staffRevenueBonusPerLevel", STAFF_REVENUE_PER_LEVEL * 100) / 100, cfg("staffRevenueBonusCap", STAFF_REVENUE_CAP * 100) / 100);
       const revenue = recipe.price * priceMult * staffRevMult * sellAmt;
       const gotCoin = Math.random() < 0.08;
       return {
@@ -896,7 +928,8 @@ export default function ChocolateFactoryTycoon() {
 
   const expandLineSlot = () => {
     setG((prev) => {
-      if (prev.maxLines >= MAX_LINE_CAP) { pushToast('더 이상 확장할 수 없어요 (최대치 도달)', 'berry'); return prev; }
+      const maxLineCap = cfg('maxLines', MAX_LINE_CAP);
+      if (prev.maxLines >= maxLineCap) { pushToast('더 이상 확장할 수 없어요 (최대치 도달)', 'berry'); return prev; }
       const cost = LINE_SLOT_COST(prev.maxLines);
       if (prev.money < cost) { pushToast('자금이 부족해요', 'berry'); return prev; }
       return { ...prev, money: prev.money - cost, maxLines: prev.maxLines + 1 };
@@ -936,7 +969,8 @@ export default function ChocolateFactoryTycoon() {
     setG((prev) => {
       const member = prev.staff.find((s) => s.id === staffId);
       if (!member) return prev;
-      if (member.level >= STAFF_MAX_LEVEL) { pushToast('이미 최고 레벨이에요', 'berry'); return prev; }
+      const staffMaxLevel = cfg('staffMaxLevel', STAFF_MAX_LEVEL);
+      if (member.level >= staffMaxLevel) { pushToast('이미 최고 레벨이에요', 'berry'); return prev; }
       const cost = STAFF_LEVEL_COST(member.level);
       if (prev.money < cost) { pushToast('자금이 부족해요', 'berry'); return prev; }
       return {
@@ -951,14 +985,14 @@ export default function ChocolateFactoryTycoon() {
   const buyUpgrade = (up) => {
     setG((prev) => {
       const researchers = prev.staff.filter((s) => s.role === 'research').length;
-      const discount = Math.min(0.3, researchers * 0.04);
+      const discount = Math.min(cfg('maxResearchDiscount', 30) / 100, researchers * (cfg('researchDiscountPerStaff', 4) / 100));
       const cost = Math.round(up.cost * (1 - discount));
       if (prev.upgrades.includes(up.id)) return prev;
       const reqMet = reqIdsOf(up).every((id) => prev.upgrades.includes(id));
       if (!reqMet) { pushToast('선행 업그레이드가 필요해요', 'berry'); return prev; }
       if (prev.money < cost) { pushToast('자금이 부족해요', 'berry'); return prev; }
       let next = { ...prev, money: prev.money - cost, upgrades: [...prev.upgrades, up.id] };
-      if (up.effect.warehouse) next.warehouseCap += up.effect.warehouse;
+      if (up.effect.warehouse) next.warehouseCap += effectFor(up.id, 'warehouse');
       if (up.effect.unlock) next.unlockedRecipes = [...prev.unlockedRecipes, up.effect.unlock];
       return next;
     });
@@ -967,7 +1001,7 @@ export default function ChocolateFactoryTycoon() {
 
   const takeLoan = (amount) => {
     setG((prev) => {
-      if (prev.debt + amount > MAX_DEBT) { pushToast('대출 한도를 초과했어요', 'berry'); return prev; }
+      if (prev.debt + amount > cfg('maxDebt', MAX_DEBT)) { pushToast('대출 한도를 초과했어요', 'berry'); return prev; }
       return { ...prev, money: prev.money + amount, debt: prev.debt + amount, totalLoanTaken: prev.totalLoanTaken + amount };
     });
     pushToast(`🏦 ${fmt(amount)}$ 대출 받았어요`, 'gold');
@@ -990,10 +1024,10 @@ export default function ChocolateFactoryTycoon() {
 
     if (kind === 'staff') {
       const rarity = pickGeneralRarity();
-      const cfg = STAFF_RARITY_CONFIG[rarity];
+      const rarityCfg = STAFF_RARITY_CONFIG[rarity];
       const role = Math.random() < 0.5 ? 'production' : 'research';
       const name = STAFF_FIRST[Math.floor(Math.random() * STAFF_FIRST.length)];
-      const member = { id: Date.now() + Math.floor(Math.random() * 1000), name, role, level: cfg.level, rarity, bonusMult: cfg.bonusMult };
+      const member = { id: Date.now() + Math.floor(Math.random() * 1000), name, role, level: rarityCfg.level, rarity, bonusMult: rarityCfg.bonusMult };
       setG((prev) => ({
         ...prev,
         gachaCoins: prev.gachaCoins - cost,
@@ -1091,10 +1125,10 @@ export default function ChocolateFactoryTycoon() {
   }
 
   const researchers = g.staff.filter((s) => s.role === 'research').length;
-  const discount = Math.min(0.3, researchers * 0.04);
+  const discount = Math.min(cfg('maxResearchDiscount', 30) / 100, researchers * (cfg('researchDiscountPerStaff', 4) / 100));
   const priceMult = (1 + g.upgrades.reduce((s, id) => s + (UPGRADES.find((u) => u.id === id)?.effect.priceMult || 0), 0) + buffBonus(g, 'priceMult') + staffTraitBonus(g.staff, 'priceMultFlat')) * prestigeMultOf(g.prestigeCount || 0);
   const effectiveWarehouseCap = g.warehouseCap + staffTraitBonus(g.staff, 'warehouseFlat');
-  const staffRevMult = getStaffRevenueMult(g.staff, g.lines);
+  const staffRevMult = getStaffRevenueMult(g.staff, g.lines, cfg("staffRevenueBonusPerLevel", STAFF_REVENUE_PER_LEVEL * 100) / 100, cfg("staffRevenueBonusCap", STAFF_REVENUE_CAP * 100) / 100);
   const displayPriceMult = priceMult * staffRevMult;
 
   const TABS = [
@@ -1227,14 +1261,14 @@ export default function ChocolateFactoryTycoon() {
       {/* 컨텐츠 — key={tab}로 탭이 바뀔 때마다 blur+slide로 다시 나타나게 한다 */}
       <div key={tab} className="ftc-tab-content" style={{ padding: '20px 22px 0' }}>
         {tab === 'factory' && (
-          <FactoryTab g={g} priceMult={displayPriceMult} effectiveWarehouseCap={effectiveWarehouseCap} buyLine={buyLine} expandLineSlot={expandLineSlot} setLineRecipe={setLineRecipe} upgradeLine={upgradeLine} assignStaff={assignStaff} setAutoSell={(v) => setG((p) => ({ ...p, autoSell: v }))} />
+          <FactoryTab g={g} priceMult={displayPriceMult} effectiveWarehouseCap={effectiveWarehouseCap} buyLine={buyLine} expandLineSlot={expandLineSlot} setLineRecipe={setLineRecipe} upgradeLine={upgradeLine} assignStaff={assignStaff} setAutoSell={(v) => setG((p) => ({ ...p, autoSell: v }))} cfg={cfg} />
         )}
         {tab === 'shop' && <ShopTab g={g} priceMult={displayPriceMult} buyResource={buyResource} sellProduct={sellProduct} />}
         {tab === 'upgrade' && <UpgradeTab g={g} discount={discount} buyUpgrade={buyUpgrade} />}
-        {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} levelUpStaff={levelUpStaff} staffRevMult={staffRevMult} />}
+        {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} levelUpStaff={levelUpStaff} staffRevMult={staffRevMult} cfg={cfg} />}
         {tab === 'gacha' && <GachaTab g={g} pullGacha={pullGacha} buyGachaCoin={buyGachaCoin} />}
         {tab === 'inventory' && <InventoryTab g={g} useBuffItem={useBuffItem} assembleRecipe={assembleRecipe} />}
-        {tab === 'finance' && <FinanceTab g={g} takeLoan={takeLoan} repayLoan={repayLoan} resolveCasino={resolveCasino} jackpotRate={jackpotRate} />}
+        {tab === 'finance' && <FinanceTab g={g} takeLoan={takeLoan} repayLoan={repayLoan} resolveCasino={resolveCasino} jackpotRate={jackpotRate} cfg={cfg} />}
         {tab === 'dashboard' && <DashboardTab g={g} resetGame={resetGame} doPrestige={doPrestige} />}
         {tab === 'achievements' && <AchievementsTab g={g} />}
         {tab === 'leaderboard' && <LeaderboardTab currentUsername={player.username} currentMoney={g.money} />}
@@ -1432,9 +1466,10 @@ function WelcomeScreen({ onStart }) {
 /* ---------------------------------------------------------------- */
 /*  공장 + 창고 탭                                                    */
 /* ---------------------------------------------------------------- */
-function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSlot, setLineRecipe, upgradeLine, assignStaff, setAutoSell }) {
+function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSlot, setLineRecipe, upgradeLine, assignStaff, setAutoSell, cfg }) {
   const whTotal = Object.values(g.warehouse).reduce((a, b) => a + b, 0);
   const capForDisplay = effectiveWarehouseCap ?? g.warehouseCap;
+  const maxLineCap = cfg('maxLines', MAX_LINE_CAP);
   return (
     <div>
       <SectionTitle
@@ -1449,8 +1484,8 @@ function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSl
             <Btn onClick={buyLine} disabled={g.lines.length >= g.maxLines}>
               <Plus size={14} /> 라인 추가 ({fmt(LINE_COST(g.lines.length))}$)
             </Btn>
-            <Btn variant="ghost" onClick={expandLineSlot} disabled={g.maxLines >= MAX_LINE_CAP}>
-              <ArrowUpCircle size={14} /> 슬롯 확장 {g.maxLines >= MAX_LINE_CAP ? '(최대)' : `(${fmt(LINE_SLOT_COST(g.maxLines))}$)`}
+            <Btn variant="ghost" onClick={expandLineSlot} disabled={g.maxLines >= maxLineCap}>
+              <ArrowUpCircle size={14} /> 슬롯 확장 {g.maxLines >= maxLineCap ? '(최대)' : `(${fmt(LINE_SLOT_COST(g.maxLines))}$)`}
             </Btn>
           </div>
         }
@@ -1784,8 +1819,13 @@ function UpgradeTab({ g, discount, buyUpgrade }) {
 /* ---------------------------------------------------------------- */
 /*  직원 관리 탭                                                      */
 /* ---------------------------------------------------------------- */
-function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult }) {
+function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult, cfg }) {
   const assignedLineOf = (staffId) => g.lines.find((l) => l.staffId === staffId);
+  const staffMaxLevel = cfg('staffMaxLevel', STAFF_MAX_LEVEL);
+  const revenuePerLevel = cfg('staffRevenueBonusPerLevel', STAFF_REVENUE_PER_LEVEL * 100);
+  const revenueCap = cfg('staffRevenueBonusCap', STAFF_REVENUE_CAP * 100);
+  const researchDiscountPerStaff = cfg('researchDiscountPerStaff', 4);
+  const maxResearchDiscount = cfg('maxResearchDiscount', 30);
   return (
     <div>
       <SectionTitle
@@ -1806,8 +1846,8 @@ function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult }) {
             </div>
             <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 12, lineHeight: 1.5 }}>
               {role.desc}
-              {key === 'production' && ' 라인에 배정하면 속도뿐 아니라 판매 수익도 레벨당 +3%(최대 +100%) 늘어나요, 라인 속도가 이미 빨라도 계속 쓸모있어요.'}
-              {key === 'research' && ' 레벨과 무관하게 인원수에 비례해 업그레이드 비용을 깎아줘요(최대 -30%).'}
+              {key === 'production' && ` 라인에 배정하면 속도뿐 아니라 판매 수익도 레벨당 +${revenuePerLevel}%(최대 +${revenueCap}%) 늘어나요, 라인 속도가 이미 빨라도 계속 쓸모있어요.`}
+              {key === 'research' && ` 레벨과 무관하게 인원수에 비례해 업그레이드 비용을 깎아줘요(1인당 -${researchDiscountPerStaff}%, 최대 -${maxResearchDiscount}%).`}
             </div>
             <Btn small variant="ghost" onClick={() => hireStaff(key)} style={{ width: '100%', justifyContent: 'center' }}>
               고용하기 ({fmt(STAFF_COST(g.staff.length))}$)
@@ -1822,7 +1862,7 @@ function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult }) {
       {g.staff.length === 0 && <div style={{ color: C.creamDim, fontSize: 13 }}>아직 고용한 직원이 없어요.</div>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px,1fr))', gap: 10 }}>
         {g.staff.map((s) => {
-          const maxed = s.level >= STAFF_MAX_LEVEL;
+          const maxed = s.level >= staffMaxLevel;
           const cost = STAFF_LEVEL_COST(s.level);
           const line = s.role === 'production' ? assignedLineOf(s.id) : null;
           const rarity = s.rarity || 'common';
@@ -2067,8 +2107,13 @@ function InventoryTab({ g, useBuffItem, assembleRecipe }) {
 /* ---------------------------------------------------------------- */
 /*  대출 & 카지노 탭                                                   */
 /* ---------------------------------------------------------------- */
-function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
+function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate, cfg }) {
   const [customBet, setCustomBet] = useState('');
+  const maxDebt = cfg('maxDebt', MAX_DEBT);
+  const loanInterestRate = cfg('loanInterestRate', LOAN_INTEREST_RATE);
+  const casinoEnabled = cfg('casinoEnabled', true);
+  const casinoMaxBet = cfg('casinoMaxBet', 50000);
+  const partialPayoutMult = cfg('slotPartialPayoutMult', 0.5);
 
   // ---- 슬롯머신 스핀 연출 상태 (실제 자금 반영은 resolveCasino에게 위임) ----
   const [spinning, setSpinning] = useState(false);
@@ -2122,7 +2167,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
   };
 
   const runSpin = (bet) => {
-    if (spinning || g.money < bet) return;
+    if (spinning || g.money < bet || !casinoEnabled || bet > casinoMaxBet) return;
     timersRef.current.forEach((t) => (t.interval ? clearInterval(t.id) : clearTimeout(t.id)));
     timersRef.current = [];
 
@@ -2133,7 +2178,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
       payout = Math.round(bet * SLOT_PAYOUTS[reels[0]]);
       outcome = 'jackpot';
     } else if (reels[0] === reels[1] || reels[1] === reels[2] || reels[0] === reels[2]) {
-      payout = Math.round(bet * 0.5);
+      payout = Math.round(bet * partialPayoutMult);
       outcome = 'partial';
     }
 
@@ -2182,7 +2227,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
 
   const confirmBet = () => {
     const n = Math.floor(Number(customBet));
-    if (!n || n <= 0 || n > g.money) return;
+    if (!n || n <= 0 || n > g.money || n > casinoMaxBet) return;
     runSpin(n);
     setCustomBet('');
   };
@@ -2192,16 +2237,16 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
       <SectionTitle
         eyebrow="Bank"
         title="대출"
-        right={<span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, color: g.debt > 0 ? C.berry : C.creamDim }}>대출 잔액 {fmt(g.debt)}$ / 한도 {fmt(MAX_DEBT)}$</span>}
+        right={<span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, color: g.debt > 0 ? C.berry : C.creamDim }}>대출 잔액 {fmt(g.debt)}$ / 한도 {fmt(maxDebt)}$</span>}
       />
       <Panel style={{ padding: 16, marginBottom: 30 }}>
         <div style={{ fontSize: 12, color: C.creamDim, lineHeight: 1.6, marginBottom: 14 }}>
-          대출 잔액에는 매초 {(LOAN_INTEREST_RATE * 100).toFixed(2)}%씩 복리 이자가 붙어요. 오래 방치할수록 눈덩이처럼 $어나니 여유 자금이 생기면 바로 갚는 게 좋아요.
+          대출 잔액에는 매초 {(loanInterestRate * 100).toFixed(2)}%씩 복리 이자가 붙어요. 오래 방치할수록 눈덩이처럼 커지니 여유 자금이 생기면 바로 갚는 게 좋아요.
         </div>
         <div style={{ fontSize: 11, letterSpacing: 1.5, color: C.creamDim, marginBottom: 8, textTransform: 'uppercase' }}>대출 받기</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
           {LOAN_OPTIONS.map((amt) => (
-            <Btn key={amt} variant="ghost" disabled={g.debt + amt > MAX_DEBT} onClick={() => takeLoan(amt)}>
+            <Btn key={amt} variant="ghost" disabled={g.debt + amt > maxDebt} onClick={() => takeLoan(amt)}>
               <Coins size={14} /> {fmt(amt)}$ 대출
             </Btn>
           ))}
@@ -2218,6 +2263,11 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
       </Panel>
 
       <SectionTitle eyebrow="Lucky Belt" title="카지노" />
+      {!casinoEnabled ? (
+        <Panel style={{ padding: 20, textAlign: 'center', color: C.creamDim, fontSize: 13 }}>
+          🔧 카지노가 현재 관리자에 의해 비활성화되어 있어요.
+        </Panel>
+      ) : (
       <Panel style={{ padding: 20 }}>
         <div
           style={{
@@ -2295,7 +2345,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
           </div>
         )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-          {CASINO_BETS.map((bet) => (
+          {CASINO_BETS.filter((bet) => bet <= casinoMaxBet).map((bet) => (
             <Btn key={bet} variant="gold" disabled={g.money < bet || spinning} onClick={() => runSpin(bet)}>
               {fmt(bet)}$ 베팅
             </Btn>
@@ -2305,14 +2355,15 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
           <input
             type="number"
             min="1"
-            placeholder="직접 베팅액 입력"
+            max={casinoMaxBet}
+            placeholder={`직접 베팅액 입력 (최대 ${fmt(casinoMaxBet)}$)`}
             value={customBet}
             onChange={(e) => setCustomBet(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && confirmBet()}
             disabled={spinning}
             style={{ width: 160, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 12.5 }}
           />
-          <Btn variant="primary" disabled={spinning || !customBet || Number(customBet) <= 0 || Number(customBet) > g.money} onClick={confirmBet}>
+          <Btn variant="primary" disabled={spinning || !customBet || Number(customBet) <= 0 || Number(customBet) > g.money || Number(customBet) > casinoMaxBet} onClick={confirmBet}>
             직접 베팅
           </Btn>
         </div>
@@ -2323,9 +2374,10 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate }) {
               <span key={s} style={{ marginRight: 12, display: 'inline-block', marginBottom: 4 }}>{s} × {SLOT_PAYOUTS[s]}</span>
             ))}
           </div>
-          <div style={{ marginTop: 6 }}>두 심볼만 일치하면 베팅액의 절반을 돌려받고, 아무것도 안 맞으면 베팅액 전액을 잃어요.</div>
+          <div style={{ marginTop: 6 }}>두 심볼만 일치하면 베팅액의 {Math.round(partialPayoutMult * 100)}%를 돌려받고, 아무것도 안 맞으면 베팅액 전액을 잃어요. (최대 베팅액 {fmt(casinoMaxBet)}$)</div>
         </div>
       </Panel>
+      )}
     </div>
   );
 }
