@@ -29,6 +29,61 @@ const C = {
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');`;
 
 /* ---------------------------------------------------------------- */
+/*  글래스모피즘 + 인터랙션 애니메이션 (공용)                              */
+/*  Panel/Btn/StatChip 등 공용 컴포넌트에서 쓰는 클래스라, 로그인/환영/    */
+/*  메인 화면 <style> 태그 세 군데에 모두 삽입해서 어디서든 먹히게 한다.    */
+/* ---------------------------------------------------------------- */
+const MOTION_CSS = `
+  .ftc-glass {
+    background: linear-gradient(155deg, rgba(59,39,22,0.62), rgba(28,17,10,0.42));
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    border: 1px solid rgba(242,228,201,0.08);
+    transition: transform .28s cubic-bezier(.2,.8,.2,1), box-shadow .28s ease, border-color .28s ease, background .28s ease;
+  }
+  .ftc-glass:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 34px rgba(0,0,0,0.45);
+    border-color: rgba(234,193,58,0.35);
+  }
+  .ftc-btn {
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s ease, filter .12s ease;
+    will-change: transform;
+  }
+  .ftc-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.035); box-shadow: 0 10px 22px rgba(0,0,0,0.4); }
+  .ftc-btn:active:not(:disabled) { transform: scale(0.93); transition-duration: .08s; }
+  @keyframes ftcBlobFloat {
+    0%,100% { transform: translate(0,0) scale(1); }
+    33% { transform: translate(30px,-40px) scale(1.08); }
+    66% { transform: translate(-24px,26px) scale(0.94); }
+  }
+  .ftc-blob { position: absolute; border-radius: 999px; filter: blur(70px); opacity: 0.55; pointer-events: none; animation: ftcBlobFloat 16s ease-in-out infinite; z-index: 0; }
+  @keyframes ftcFadeBlurIn {
+    from { opacity: 0; filter: blur(10px); transform: translateY(12px) scale(.97); }
+    to { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+  }
+  .ftc-fade-in { animation: ftcFadeBlurIn .5s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes ftcTabIn {
+    from { opacity: 0; filter: blur(8px); transform: translateX(16px); }
+    to { opacity: 1; filter: blur(0); transform: translateX(0); }
+  }
+  .ftc-tab-content { animation: ftcTabIn .38s cubic-bezier(.2,.8,.2,1) both; position: relative; z-index: 1; }
+  @keyframes ftcValueFlash {
+    0% { filter: blur(4px); opacity: .35; transform: scale(1.18); }
+    55% { filter: blur(0); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+  .ftc-value-flash { display: inline-block; animation: ftcValueFlash .45s ease-out; }
+  @keyframes ftcTabBtnPop {
+    0% { transform: scale(.85); opacity: .5; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .ftc-tab-btn { transition: color .2s ease, border-color .25s ease, transform .15s ease; }
+  .ftc-tab-btn:hover { transform: translateY(-1px); }
+  .ftc-tab-btn[data-active="true"] span.ftc-tab-underline { animation: ftcTabBtnPop .25s ease; }
+`;
+
+/* ---------------------------------------------------------------- */
 /*  좌우 배너 광고                                                     */
 /*  - 아래 src에 이미지 URL을 넣으면 화면 양옆에 배너가 표시됩니다.        */
 /*  - href를 넣으면 배너 클릭 시 새 탭으로 이동합니다.                    */
@@ -405,12 +460,13 @@ const initialGame = () => ({
 /* ---------------------------------------------------------------- */
 /*  작은 유틸 컴포넌트                                                 */
 /* ---------------------------------------------------------------- */
-function Panel({ children, style, ...rest }) {
+function Panel({ children, style, className, glass = true, ...rest }) {
   return (
     <div
+      className={`${glass ? 'ftc-glass' : ''}${className ? ` ${className}` : ''}`}
       style={{
-        background: C.bgPanel,
-        border: `1px solid ${C.line}`,
+        background: glass ? undefined : C.bgPanel,
+        border: glass ? undefined : `1px solid ${C.line}`,
         borderRadius: 14,
         ...style,
       }}
@@ -423,25 +479,31 @@ function Panel({ children, style, ...rest }) {
 
 function StatChip({ icon, label, value, accent }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.bgPanelLight, border: `1px solid ${C.line}`, borderRadius: 10, padding: '7px 12px' }}>
+    <div className="ftc-glass" style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, padding: '7px 12px' }}>
       <span style={{ fontSize: 15 }}>{icon}</span>
       <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
         <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 10, color: C.creamDim, letterSpacing: 0.4 }}>{label}</span>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 700, color: accent || C.cream }}>{value}</span>
+        {/* key={value}로 값이 바뀔 때마다 다시 마운트시켜서, 매번 blur→선명 flash 애니메이션이 재생되게 한다 */}
+        <span key={value} className="ftc-value-flash" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 700, color: accent || C.cream }}>{value}</span>
       </div>
     </div>
   );
 }
 
 function ProgressBar({ pct, color, height = 8 }) {
+  const p = Math.min(100, pct);
   return (
     <div style={{ width: '100%', height, background: '#1C1108', borderRadius: 99, overflow: 'hidden', border: `1px solid ${C.line}` }}>
-      <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color || C.caramel, transition: 'width .25s linear' }} />
+      <div style={{
+        width: `${p}%`, height: '100%', background: color || C.caramel,
+        transition: 'width .35s cubic-bezier(.2,.8,.2,1)',
+        boxShadow: p > 0 ? `0 0 10px ${color || C.caramel}` : 'none',
+      }} />
     </div>
   );
 }
 
-function Btn({ children, onClick, disabled, variant = 'primary', style, small }) {
+function Btn({ children, onClick, disabled, variant = 'primary', style, small, className }) {
   const base = {
     fontFamily: "'Space Grotesk', sans-serif",
     fontWeight: 600,
@@ -454,16 +516,16 @@ function Btn({ children, onClick, disabled, variant = 'primary', style, small })
     display: 'inline-flex',
     alignItems: 'center',
     gap: 6,
-    transition: 'transform .12s ease, filter .12s ease',
   };
   const variants = {
     primary: { background: C.caramel, color: '#1C1108' },
     gold: { background: C.gold, color: '#1C1108' },
-    ghost: { background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}` },
+    ghost: { background: 'rgba(74,51,29,0.55)', color: C.cream, border: `1px solid ${C.line}`, backdropFilter: 'blur(8px)' },
     danger: { background: C.berry, color: C.cream },
   };
   return (
     <button
+      className={`ftc-btn${className ? ` ${className}` : ''}`}
       onClick={onClick}
       disabled={disabled}
       onMouseEnter={(e) => !disabled && (e.currentTarget.style.filter = 'brightness(1.1)')}
@@ -477,7 +539,7 @@ function Btn({ children, onClick, disabled, variant = 'primary', style, small })
 
 function SectionTitle({ eyebrow, title, right }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+    <div className="ftc-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
       <div>
         <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 11, letterSpacing: 2, color: C.caramelLight, textTransform: 'uppercase', marginBottom: 2 }}>{eyebrow}</div>
         <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: C.cream }}>{title}</div>
@@ -1049,14 +1111,19 @@ export default function ChocolateFactoryTycoon() {
   ];
 
   return (
-    <div style={{ minHeight: 640, background: C.bgDeep, display: 'flex', justifyContent: 'center', gap: 16, padding: '20px 16px' }}>
+    <div style={{ minHeight: 640, background: C.bgDeep, display: 'flex', justifyContent: 'center', gap: 16, padding: '20px 16px', position: 'relative', overflow: 'hidden' }}>
+      {/* 배경 블러 블롭 — Panel/Btn의 backdrop-filter 유리효과가 실제로 보이도록 뒤에 색을 깔아준다 */}
+      <div className="ftc-blob" style={{ width: 420, height: 420, left: '8%', top: -80, background: C.caramel, animationDelay: '0s' }} />
+      <div className="ftc-blob" style={{ width: 360, height: 360, right: '6%', top: '30%', background: C.gold, animationDelay: '-5s' }} />
+      <div className="ftc-blob" style={{ width: 380, height: 380, left: '30%', bottom: -100, background: C.berry, animationDelay: '-10s', opacity: 0.35 }} />
       <style>{`
         ${FONT_IMPORT}
+        ${MOTION_CSS}
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { height: 6px; width: 6px; }
         ::-webkit-scrollbar-thumb { background: ${C.bgPanelLighter}; border-radius: 4px; }
         @keyframes beltMove { from { background-position: 0 0; } to { background-position: -48px 0; } }
-        @keyframes toastIn { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+        @keyframes toastIn { from { opacity: 0; filter: blur(6px); transform: translate(-50%, -8px); } to { opacity: 1; filter: blur(0); transform: translate(-50%, 0); } }
         @keyframes pulseGlow { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
         @keyframes slotScrollStrip { from { transform: translateY(0); } to { transform: translateY(-${SLOT_SYMBOLS.length * SLOT_SYMBOL_H}px); } }
         @keyframes slotLand { 0% { transform: scale(1.35) rotate(-5deg); } 55% { transform: scale(0.88) rotate(3deg); } 100% { transform: scale(1) rotate(0deg); } }
@@ -1070,7 +1137,7 @@ export default function ChocolateFactoryTycoon() {
 
       <div className="ftc-ad-col"><AdBanner {...AD_BANNERS.left} /></div>
 
-      <div style={{ width: '100%', maxWidth: 900, minHeight: 640, background: C.bgDeep, fontFamily: "'Space Grotesk', sans-serif", position: 'relative', paddingBottom: 24 }}>
+      <div style={{ width: '100%', maxWidth: 1500, minHeight: 640, background: C.bgDeep, fontFamily: "'Space Grotesk', sans-serif", position: 'relative', paddingBottom: 24 }}>
       {/* 헤더 */}
       <div style={{ padding: '18px 22px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -1140,6 +1207,8 @@ export default function ChocolateFactoryTycoon() {
             return (
               <button
                 key={t.id}
+                className="ftc-tab-btn"
+                data-active={active}
                 onClick={() => setTab(t.id)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', background: 'none', border: 'none',
@@ -1148,15 +1217,15 @@ export default function ChocolateFactoryTycoon() {
                 }}
               >
                 <Icon size={15} />
-                {t.label}
+                <span className="ftc-tab-underline">{t.label}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* 컨텐츠 */}
-      <div style={{ padding: '20px 22px 0' }}>
+      {/* 컨텐츠 — key={tab}로 탭이 바뀔 때마다 blur+slide로 다시 나타나게 한다 */}
+      <div key={tab} className="ftc-tab-content" style={{ padding: '20px 22px 0' }}>
         {tab === 'factory' && (
           <FactoryTab g={g} priceMult={displayPriceMult} effectiveWarehouseCap={effectiveWarehouseCap} buyLine={buyLine} expandLineSlot={expandLineSlot} setLineRecipe={setLineRecipe} upgradeLine={upgradeLine} assignStaff={assignStaff} setAutoSell={(v) => setG((p) => ({ ...p, autoSell: v }))} />
         )}
@@ -1175,9 +1244,10 @@ export default function ChocolateFactoryTycoon() {
       {g.toast && (
         <div
           key={g.toast.key}
+          className="ftc-glass"
           style={{
-            position: 'fixed', top: 18, left: '50%', animation: 'toastIn .25s ease',
-            background: C.bgPanelLighter, border: `1px solid ${C.caramelLight}`, color: C.cream,
+            position: 'fixed', top: 18, left: '50%', animation: 'toastIn .3s ease',
+            border: `1px solid ${C.caramelLight}`, color: C.cream,
             padding: '9px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 50, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
           }}
         >
@@ -1231,8 +1301,8 @@ function AuthScreen({ onAuth, onGuest }) {
       minHeight: 640, background: `radial-gradient(circle at 30% 20%, #3B2716 0%, ${C.bgDeep} 60%)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk', sans-serif", padding: 24,
     }}>
-      <style>{FONT_IMPORT}</style>
-      <Panel style={{ width: '100%', maxWidth: 380, padding: 28 }}>
+      <style>{`${FONT_IMPORT}${MOTION_CSS}`}</style>
+      <Panel glass style={{ width: '100%', maxWidth: 380, padding: 28 }} className="ftc-fade-in">
         <div style={{ textAlign: 'center', marginBottom: 22 }}>
           <div style={{ fontSize: 32, marginBottom: 6 }}>🏭</div>
           <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, color: C.cream }}>카카오 앤 코</div>
@@ -1310,11 +1380,11 @@ function WelcomeScreen({ onStart }) {
       minHeight: 640, background: `radial-gradient(circle at 30% 20%, #3B2716 0%, ${C.bgDeep} 60%)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk', sans-serif", padding: 24,
     }}>
-      <style>{`${FONT_IMPORT}
+      <style>{`${FONT_IMPORT}${MOTION_CSS}
         @keyframes floatBar { 0%,100% { transform: translateY(0) rotate(-6deg);} 50% { transform: translateY(-10px) rotate(6deg);} }
         @keyframes shimmer { 0% { background-position: -200px 0;} 100% { background-position: 200px 0;} }
       `}</style>
-      <div style={{ maxWidth: 620, width: '100%', textAlign: 'center' }}>
+      <div className="ftc-fade-in" style={{ maxWidth: 620, width: '100%', textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginBottom: 22 }}>
           {['🍫', '🌰', '🍬', '🥛'].map((e, i) => (
             <span key={i} style={{ fontSize: 32, display: 'inline-block', animation: `floatBar ${2.4 + i * 0.3}s ease-in-out infinite` }}>{e}</span>
@@ -1387,12 +1457,12 @@ function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSl
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14, marginBottom: 30 }}>
-        {g.lines.map((line) => {
+        {g.lines.map((line, i) => {
           const recipe = RECIPES.find((r) => r.id === line.recipeId);
           const staffMember = g.staff.find((s) => s.id === line.staffId);
           const prodStaff = g.staff.filter((s) => s.role === 'production');
           return (
-            <Panel key={line.id} style={{ padding: 16 }}>
+            <Panel key={line.id} className="ftc-fade-in" style={{ padding: 16, animationDelay: `${i * 0.06}s` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <span style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 700, color: C.cream }}>라인 · Lv.{line.level}</span>
                 <span style={{ fontSize: 22 }}>{recipe?.emoji}</span>
@@ -1446,11 +1516,11 @@ function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSl
       <Panel style={{ padding: 16, marginBottom: 10 }}>
         <ProgressBar pct={(whTotal / capForDisplay) * 100} color={C.caramelLight} height={10} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px,1fr))', gap: 10, marginTop: 16 }}>
-          {RECIPES.filter((r) => g.unlockedRecipes.includes(r.id)).map((r) => (
-            <div key={r.id} style={{ background: C.bgPanelLight, borderRadius: 10, padding: 10, textAlign: 'center', border: `1px solid ${C.line}` }}>
+          {RECIPES.filter((r) => g.unlockedRecipes.includes(r.id)).map((r, i) => (
+            <div key={r.id} className="ftc-glass ftc-fade-in" style={{ borderRadius: 10, padding: 10, textAlign: 'center', animationDelay: `${i * 0.05}s` }}>
               <div style={{ fontSize: 22 }}>{r.emoji}</div>
               <div style={{ fontSize: 11.5, color: C.creamDim, margin: '4px 0' }}>{r.name}</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: C.gold, fontSize: 16 }}>{fmt(g.warehouse[r.id] || 0)}</div>
+              <div key={g.warehouse[r.id] || 0} className="ftc-value-flash" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: C.gold, fontSize: 16 }}>{fmt(g.warehouse[r.id] || 0)}</div>
             </div>
           ))}
         </div>
@@ -1475,8 +1545,8 @@ function ShopTab({ g, priceMult, buyResource, sellProduct }) {
     <div>
       <SectionTitle eyebrow="Trading Post" title="원재료 구매" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))', gap: 12, marginBottom: 30 }}>
-        {Object.entries(RESOURCE_META).map(([key, meta]) => (
-          <Panel key={key} style={{ padding: 14 }}>
+        {Object.entries(RESOURCE_META).map(([key, meta], i) => (
+          <Panel key={key} className="ftc-fade-in" style={{ padding: 14, animationDelay: `${i * 0.05}s` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 22 }}>{meta.emoji}</span>
               <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.gold, fontWeight: 700, fontSize: 13 }}>{g.prices[key]}$/개</span>
@@ -1515,10 +1585,10 @@ function ShopTab({ g, priceMult, buyResource, sellProduct }) {
 
       <SectionTitle eyebrow="Market" title="완제품 판매" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px,1fr))', gap: 12 }}>
-        {RECIPES.filter((r) => g.unlockedRecipes.includes(r.id)).map((r) => {
+        {RECIPES.filter((r) => g.unlockedRecipes.includes(r.id)).map((r, i) => {
           const qty = g.warehouse[r.id] || 0;
           return (
-            <Panel key={r.id} style={{ padding: 14 }}>
+            <Panel key={r.id} className="ftc-fade-in" style={{ padding: 14, animationDelay: `${i * 0.05}s` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <span style={{ fontSize: 22 }}>{r.emoji}</span>
                 <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.pistachio, fontWeight: 700, fontSize: 13 }}>{fmt(r.price * priceMult)}$/개</span>
@@ -1673,9 +1743,10 @@ function UpgradeTab({ g, discount, buyUpgrade }) {
               <foreignObject key={u.id} x={x - CARD_W / 2} y={y - CARD_H / 2} width={CARD_W} height={CARD_H}>
                 <div
                   xmlns="http://www.w3.org/1999/xhtml"
+                  className="ftc-glass ftc-fade-in"
                   style={{
                     width: CARD_W, height: CARD_H, boxSizing: 'border-box', padding: 12,
-                    background: C.bgPanel, borderRadius: 14, opacity: reqMet ? 1 : 0.55,
+                    borderRadius: 14, opacity: reqMet ? 1 : 0.55,
                     border: `${owned ? 2.5 : 1.5}px solid ${owned ? C.gold : info.color}`,
                     boxShadow: owned ? `0 0 18px ${info.color}66` : 'none',
                     display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
@@ -1728,7 +1799,7 @@ function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult }) {
       />
       <div style={{ display: 'flex', gap: 10, marginBottom: 22, flexWrap: 'wrap' }}>
         {Object.entries(ROLES).map(([key, role]) => (
-          <Panel key={key} style={{ padding: 14, flex: '1 1 240px' }}>
+          <Panel key={key} className="ftc-fade-in" style={{ padding: 14, flex: '1 1 240px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <UserPlus size={16} color={role.color} />
               <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream }}>{role.label}</span>
@@ -1928,7 +1999,7 @@ function InventoryTab({ g, useBuffItem, assembleRecipe }) {
           const ready = have >= r.needFragments;
           const discovered = have > 0 || unlocked; // 조각을 하나라도 얻기 전까진 정체를 가린다
           return (
-            <Panel key={r.id} style={{ padding: 14, opacity: unlocked ? 0.7 : 1 }}>
+            <Panel key={r.id} className="ftc-fade-in" style={{ padding: 14, opacity: unlocked ? 0.7 : 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 22 }}>{discovered ? r.emoji : '❓'}</span>
                 <div>
@@ -1958,7 +2029,7 @@ function InventoryTab({ g, useBuffItem, assembleRecipe }) {
         {BUFF_ITEM_LIST.filter((b) => (buffs[b.id] || 0) > 0).map((b) => {
           const rarityKey = Object.keys(BUFF_BY_RARITY).find((k) => BUFF_BY_RARITY[k].id === b.id);
           return (
-            <Panel key={b.id} style={{ padding: 14 }}>
+            <Panel key={b.id} className="ftc-fade-in" style={{ padding: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 22 }}>{b.emoji}</span>
                 <div>
@@ -2412,7 +2483,7 @@ function AchievementsTab({ g }) {
         {ACHIEVEMENTS.map((a) => {
           const done = g.achievements.includes(a.id);
           return (
-            <Panel key={a.id} style={{ padding: 14, display: 'flex', alignItems: 'flex-start', gap: 10, opacity: done ? 1 : 0.6, borderColor: done ? C.gold : C.line }}>
+            <Panel key={a.id} className="ftc-fade-in" style={{ padding: 14, display: 'flex', alignItems: 'flex-start', gap: 10, opacity: done ? 1 : 0.6, borderColor: done ? C.gold : C.line }}>
               <Award size={18} color={done ? C.gold : C.creamDim} style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: done ? C.cream : C.creamDim }}>{a.name}</div>
