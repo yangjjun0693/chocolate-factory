@@ -4166,14 +4166,37 @@ function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleA
 }
 
 function QuickMoneyButtons({ playerId, onAdjustMoney }) {
+  const [amount, setAmount] = useState('');
+  const num = Number(amount);
+  const valid = amount !== '' && !Number.isNaN(num) && num !== 0;
+
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {[100, 500, 1000, 5000, 10000, 50000, 100000].map((amt) => (
-        <Btn key={amt} variant="gold" small onClick={() => onAdjustMoney(playerId, amt)}>{fmt(amt)} 지급</Btn>
-      ))}
-      {[-100, -500, -1000, -5000, -10000].map((amt) => (
-        <Btn key={amt} variant="danger" small onClick={() => onAdjustMoney(playerId, amt)}>{fmt(Math.abs(amt))} 차감</Btn>
-      ))}
+    <div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        <input
+          type="number"
+          placeholder="직접 입력 (음수면 차감)"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+        />
+        <Btn
+          variant={num < 0 ? 'danger' : 'gold'}
+          small
+          disabled={!valid}
+          onClick={() => { onAdjustMoney(playerId, num); setAmount(''); }}
+        >
+          {num < 0 ? '차감' : '지급'}
+        </Btn>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {[100, 500, 1000, 5000, 10000, 50000, 100000].map((amt) => (
+          <Btn key={amt} variant="gold" small onClick={() => onAdjustMoney(playerId, amt)}>{fmt(amt)} 지급</Btn>
+        ))}
+        {[-100, -500, -1000, -5000, -10000].map((amt) => (
+          <Btn key={amt} variant="danger" small onClick={() => onAdjustMoney(playerId, amt)}>{fmt(Math.abs(amt))} 차감</Btn>
+        ))}
+      </div>
     </div>
   );
 }
