@@ -85,17 +85,6 @@ const MOTION_CSS = `
 `;
 
 /* ---------------------------------------------------------------- */
-/*  좌우 배너 광고                                                     */
-/*  - 아래 src에 이미지 URL을 넣으면 화면 양옆에 배너가 표시됩니다.        */
-/*  - href를 넣으면 배너 클릭 시 새 탭으로 이동합니다.                    */
-/*  - 권장 사이즈: 160 x 600 (와이드 스크린 세로 배너)                    */
-/* ---------------------------------------------------------------- */
-const AD_BANNERS = {
-  left: { src: 'https://i.imgur.com/lghIHV2.png', href: 'https://kasaneteto.jp/', alt: 'https://i.imgur.com/lghIHV2.png' },
-  right: { src: 'https://i.imgur.com/xfa4mYF.png', href: 'https://tabbarr.pages.dev/돈줘.html', alt: 'https://i.imgur.com/xfa4mYF.png' },
-};
-
-/* ---------------------------------------------------------------- */
 /*  Supabase 연동 (이름 + 비밀번호 인증 & 세이브)                        */
 /*  - Supabase Auth(이메일 기반) 대신, players/game_saves 테이블 +      */
 /*    security definer RPC(signup/login/save_game)로 직접 구현했다.    */
@@ -612,31 +601,6 @@ function SectionTitle({ eyebrow, title, right }) {
 /* ---------------------------------------------------------------- */
 /*  메인 컴포넌트                                                     */
 /* ---------------------------------------------------------------- */
-/* ---------------------------------------------------------------- */
-/*  배너 광고 컴포넌트                                                  */
-/*  - src가 비어있으면 자리만 차지하는 빈 플레이스홀더를 보여준다.          */
-/*  - src가 있으면 실제 이미지를 렌더링하고, href가 있으면 클릭 가능.       */
-/* ---------------------------------------------------------------- */
-  const box = (
-    <div
-      style={{
-        width: 160, flexShrink: 0, background: C.bgPanel, border: `1px dashed ${C.line}`,
-        borderRadius: 12, overflow: 'hidden', position: 'sticky', top: 20,
-      }}
-    >
-      {inner}
-    </div>
-  );
-
-  if (!src) return box;
-
-  return (
-    <a href={href || '#'} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-      {box}
-    </a>
-  );
-}
-
 export default function ChocolateFactoryTycoon() {
   const [g, setG] = useState(initialGame());
   const [tab, setTab] = useState('factory');
@@ -1243,7 +1207,7 @@ export default function ChocolateFactoryTycoon() {
   ];
 
   return (
-<div style={{ minHeight: '100vh', background: C.bgDeep, display: 'flex', justifyContent: 'center', gap: 0, padding: '8px 12px', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ minHeight: 640, background: C.bgDeep, display: 'flex', justifyContent: 'center', gap: 16, padding: '20px 16px', position: 'relative', overflow: 'hidden' }}>
       {/* 배경 블러 블롭 — Panel/Btn의 backdrop-filter 유리효과가 실제로 보이도록 뒤에 색을 깔아준다 */}
       <div className="ftc-blob" style={{ width: 420, height: 420, left: '8%', top: -80, background: C.caramel, animationDelay: '0s' }} />
       <div className="ftc-blob" style={{ width: 360, height: 360, right: '6%', top: '30%', background: C.gold, animationDelay: '-5s' }} />
@@ -1263,12 +1227,9 @@ export default function ChocolateFactoryTycoon() {
         @keyframes jackpotPop { 0% { transform: translate(-50%,-40%) scale(0.4) rotate(-8deg); opacity: 0; } 55% { transform: translate(-50%,-52%) scale(1.2) rotate(4deg); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1) rotate(0deg); opacity: 1; } }
         @keyframes confettiBurst { 0% { transform: translate(0,0) rotate(0deg); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; } }
         select { font-family: 'Space Grotesk', sans-serif; }
-        .ftc-ad-col { display: block; }
-        @media (max-width: 1180px) { .ftc-ad-col { display: none; } }
       `}</style>
 
-
-<div style={{ width: '100%', minHeight: '100vh', background: C.bgDeep, fontFamily: "'Space Grotesk', sans-serif", position: 'relative', paddingBottom: 16 }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 640, background: C.bgDeep, fontFamily: "'Space Grotesk', sans-serif", position: 'relative', paddingBottom: 24 }}>
       {/* 헤더 */}
       <div style={{ padding: '18px 22px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -1388,7 +1349,7 @@ export default function ChocolateFactoryTycoon() {
         </div>
       )}
       </div>
-
+    </div>
   );
 }
 
