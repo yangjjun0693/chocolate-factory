@@ -2244,6 +2244,18 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate, cfg })
   const stoppedRef = useRef([true, true, true]);
   const timersRef = useRef([]);
 
+  // 스핀 연출(릴 굴러가는 애니메이션 + 잭팟 컨페티) 끄기 — 켜/꺼짐은 기기에 저장돼 다음에도 유지됨
+  const [noAnim, setNoAnim] = useState(() => {
+    try { return localStorage.getItem('ftc_casinoNoAnim') === '1'; } catch (e) { return false; }
+  });
+  const toggleNoAnim = () => {
+    setNoAnim((prev) => {
+      const next = !prev;
+      try { localStorage.setItem('ftc_casinoNoAnim', next ? '1' : '0'); } catch (e) { /* ignore */ }
+      return next;
+    });
+  };
+
   useEffect(() => () => {
     timersRef.current.forEach((t) => (t.interval ? clearInterval(t.id) : clearTimeout(t.id)));
   }, []);
@@ -2306,6 +2318,15 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate, cfg })
     setConfetti([]);
     stoppedRef.current = [false, false, false];
     setStoppedMask([false, false, false]);
+
+    if (noAnim) {
+      // 연출 생략: 릴을 바로 결과값으로 세팅하고, 잭팟이어도 컨페티 없이 결과만 즉시 반영
+      setDisplayReels(reels);
+      setStoppedMask([true, true, true]);
+      setSpinning(false);
+      resolveCasino({ bet, reels, payout, outcome });
+      return;
+    }
 
     // 왼쪽부터 순서대로 릴을 멈추는 연출 (실제 결과값으로 착지) — 스핀 중엔 CSS로 심볼 띠가 연속 스크롤된다
     [550, 900, 1250].forEach((delay, i) => {
@@ -2381,7 +2402,15 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate, cfg })
         </div>
       </Panel>
 
-      <SectionTitle eyebrow="Lucky Belt" title="카지노" />
+      <SectionTitle
+        eyebrow="Lucky Belt"
+        title="카지노"
+        right={
+          <Btn variant={noAnim ? 'gold' : 'ghost'} small onClick={toggleNoAnim}>
+            {noAnim ? '🎬 애니메이션 켜기' : '⏩ 애니메이션 없애기'}
+          </Btn>
+        }
+      />
       {!casinoEnabled ? (
         <Panel style={{ padding: 20, textAlign: 'center', color: C.creamDim, fontSize: 13 }}>
           🔧 카지노가 현재 관리자에 의해 비활성화되어 있어요.
