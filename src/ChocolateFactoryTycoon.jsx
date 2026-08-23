@@ -617,25 +617,6 @@ function SectionTitle({ eyebrow, title, right }) {
 /*  - src가 비어있으면 자리만 차지하는 빈 플레이스홀더를 보여준다.          */
 /*  - src가 있으면 실제 이미지를 렌더링하고, href가 있으면 클릭 가능.       */
 /* ---------------------------------------------------------------- */
-function AdBanner({ src, href, alt }) {
-  const inner = src ? (
-    <img
-      src={src}
-      alt={alt || '광고'}
-      style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 12 }}
-    />
-  ) : (
-    <div
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: 6, height: 480, color: C.creamDim, fontSize: 11, textAlign: 'center', padding: 12, lineHeight: 1.6,
-      }}
-    >
-      <span style={{ fontSize: 22 }}>🖼️</span>
-      AD_BANNERS 에<br />이미지 URL을 넣어주세요<br />(160×600 권장)
-    </div>
-  );
-
   const box = (
     <div
       style={{
@@ -1408,8 +1389,6 @@ export default function ChocolateFactoryTycoon() {
       )}
       </div>
 
-      <div className="ftc-ad-col"><AdBanner {...AD_BANNERS.right} /></div>
-    </div>
   );
 }
 
