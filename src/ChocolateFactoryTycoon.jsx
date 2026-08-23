@@ -3184,6 +3184,27 @@ function AdminPage({ onClose }) {
     }
   };
 
+  // 플레이어 간 송금: 보내는 쪽 잔액을 서버(admin_transfer_money RPC)에서 원자적으로
+  // 검증하고 차감 + 지급을 한 트랜잭션으로 처리한다 (잔액 부족하면 통째로 실패).
+  const transferMoney = async (fromPlayerId, toPlayerId, amount) => {
+    if (!fromPlayerId || !toPlayerId) return;
+    if (fromPlayerId === toPlayerId) {
+      setError('같은 플레이어에게는 송금할 수 없어요');
+      return;
+    }
+    const fromName = players.find((p) => p.id === fromPlayerId)?.username || '?';
+    const toName = players.find((p) => p.id === toPlayerId)?.username || '?';
+    if (!window.confirm(`${fromName} → ${toName}\n${Math.abs(amount).toLocaleString('ko-KR')}$ 송금하시겠어요?`)) return;
+    try {
+      await supabaseAdminRpc('admin_transfer_money', { p_from_player_id: fromPlayerId, p_to_player_id: toPlayerId, p_amount: amount });
+      loadPlayers();
+      if (selectedPlayer?.id === fromPlayerId || selectedPlayer?.id === toPlayerId) loadPlayerDetail(selectedPlayer.id);
+      pushToast(`송금 완료: ${fromName} → ${toName} ${Math.abs(amount).toLocaleString('ko-KR')}$`, 'gold');
+    } catch (err) {
+      setError(err.message || '송금 실패');
+    }
+  };
+
   const toggleAds = async (playerId, enabled) => {
     try {
       await supabaseAdminRpc('admin_toggle_ads', { p_player_id: playerId, p_enabled: enabled });
@@ -3417,6 +3438,7 @@ function AdminPage({ onClose }) {
               onSelectPlayer={setSelectedPlayer}
               onLoadDetail={loadPlayerDetail}
               onAdjustMoney={adjustMoney}
+              onTransferMoney={transferMoney}
               onToggleAds={toggleAds}
               onSetJackpotRate={setJackpotRate}
               onSetGlobalConfig={setGlobalConfig}
@@ -3523,7 +3545,7 @@ function PlayerManagementTab({ players, loading, error, selectedPlayer, playerDe
 /* ---------------------------------------------------------------- */
 /*  플레이어 제어 탭                                                   */
 /* ---------------------------------------------------------------- */
-function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlayer, onLoadDetail, onAdjustMoney, onToggleAds, onSetJackpotRate, onSetGlobalConfig }) {
+function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlayer, onLoadDetail, onAdjustMoney, onTransferMoney, onToggleAds, onSetJackpotRate, onSetGlobalConfig }) {
   const [moneyAmount, setMoneyAmount] = useState('');
   const [jackpotRate, setJackpotRateState] = useState(3);
   const [configKey, setConfigKey] = useState('productionSpeedMult');
@@ -3534,9 +3556,11 @@ function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlay
       {selectedPlayer && playerDetail ? (
         <PlayerControlPanel
           player={playerDetail}
+          players={players}
           moneyAmount={moneyAmount}
           setMoneyAmount={setMoneyAmount}
           onAdjustMoney={onAdjustMoney}
+          onTransferMoney={onTransferMoney}
           onToggleAds={onToggleAds}
           onClose={() => onSelectPlayer(null)}
         />
@@ -3635,9 +3659,17 @@ function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlay
   );
 }
 
-function PlayerControlPanel({ player, moneyAmount, setMoneyAmount, onAdjustMoney, onToggleAds, onClose }) {
+function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAdjustMoney, onTransferMoney, onToggleAds, onClose }) {
   const saveData = player.save_data || {};
   const hasAds = saveData.adsEnabled !== false;
+  const customAmount = Number(moneyAmount);
+  const hasValidCustomAmount = moneyAmount !== '' && !Number.isNaN(customAmount) && customAmount !== 0;
+
+  const [transferTargetId, setTransferTargetId] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const otherPlayers = (players || []).filter((p) => p.id !== player.player?.id);
+  const transferAmountNum = Number(transferAmount);
+  const hasValidTransferAmount = transferAmount !== '' && !Number.isNaN(transferAmountNum) && transferAmountNum > 0;
 
   return (
     <div>
@@ -3661,6 +3693,13 @@ function PlayerControlPanel({ player, moneyAmount, setMoneyAmount, onAdjustMoney
               onChange={(e) => setMoneyAmount(e.target.value)}
               style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
             />
+            <Btn
+              variant={customAmount < 0 ? 'danger' : 'gold'}
+              disabled={!hasValidCustomAmount}
+              onClick={() => onAdjustMoney(player.player.id, customAmount)}
+            >
+              {customAmount < 0 ? '차감' : '지급'}
+            </Btn>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {[100, 500, 1000, 5000, 10000, 50000].map((amt) => (
@@ -3669,6 +3708,45 @@ function PlayerControlPanel({ player, moneyAmount, setMoneyAmount, onAdjustMoney
             {[-100, -500, -1000, -5000].map((amt) => (
               <Btn key={amt} variant="danger" small onClick={() => { setMoneyAmount(amt); onAdjustMoney(player.player.id, amt); }}>{fmt(Math.abs(amt))} 차감</Btn>
             ))}
+          </div>
+        </Panel>
+
+        <Panel style={{ padding: 16 }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>🔁 다른 플레이어에게 송금</div>
+          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>
+            {player.player?.username}의 자산에서 차감해 다른 플레이어에게 지급
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <select
+              value={transferTargetId}
+              onChange={(e) => setTransferTargetId(e.target.value)}
+              style={{ background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+            >
+              <option value="">받는 플레이어 선택</option>
+              {otherPlayers.map((p) => (
+                <option key={p.id} value={p.id}>{p.username} ({fmt(Number(p.money) || 0)}$)</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="number"
+                min="1"
+                placeholder="송금액"
+                value={transferAmount}
+                onChange={(e) => setTransferAmount(e.target.value)}
+                style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+              />
+              <Btn
+                variant="gold"
+                disabled={!transferTargetId || !hasValidTransferAmount}
+                onClick={() => {
+                  onTransferMoney(player.player.id, transferTargetId, transferAmountNum);
+                  setTransferAmount('');
+                }}
+              >
+                송금
+              </Btn>
+            </div>
           </div>
         </Panel>
 
