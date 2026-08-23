@@ -3205,6 +3205,22 @@ function AdminPage({ onClose }) {
     }
   };
 
+  // 플레이어 비밀번호 강제 초기화 (signup과 동일하게 bcrypt로 서버에서 해싱)
+  const resetPlayerPassword = async (playerId, newPassword) => {
+    if (!newPassword || newPassword.length < 4) {
+      setError('비밀번호는 4자 이상이어야 해요');
+      return;
+    }
+    const name = players.find((p) => p.id === playerId)?.username || '?';
+    if (!window.confirm(`${name}의 비밀번호를 변경하시겠어요?`)) return;
+    try {
+      await supabaseAdminRpc('admin_reset_player_password', { p_player_id: playerId, p_new_password: newPassword });
+      pushToast(`${name}의 비밀번호가 변경됐어요`, 'gold');
+    } catch (err) {
+      setError(err.message || '비밀번호 변경 실패');
+    }
+  };
+
   const toggleAds = async (playerId, enabled) => {
     try {
       await supabaseAdminRpc('admin_toggle_ads', { p_player_id: playerId, p_enabled: enabled });
@@ -3440,6 +3456,7 @@ function AdminPage({ onClose }) {
               onAdjustMoney={adjustMoney}
               onTransferMoney={transferMoney}
               onToggleAds={toggleAds}
+              onResetPassword={resetPlayerPassword}
               onSetJackpotRate={setJackpotRate}
               onSetGlobalConfig={setGlobalConfig}
             />
@@ -3545,7 +3562,7 @@ function PlayerManagementTab({ players, loading, error, selectedPlayer, playerDe
 /* ---------------------------------------------------------------- */
 /*  플레이어 제어 탭                                                   */
 /* ---------------------------------------------------------------- */
-function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlayer, onLoadDetail, onAdjustMoney, onTransferMoney, onToggleAds, onSetJackpotRate, onSetGlobalConfig }) {
+function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlayer, onLoadDetail, onAdjustMoney, onTransferMoney, onToggleAds, onResetPassword, onSetJackpotRate, onSetGlobalConfig }) {
   const [moneyAmount, setMoneyAmount] = useState('');
   const [jackpotRate, setJackpotRateState] = useState(3);
   const [configKey, setConfigKey] = useState('productionSpeedMult');
@@ -3562,6 +3579,7 @@ function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlay
           onAdjustMoney={onAdjustMoney}
           onTransferMoney={onTransferMoney}
           onToggleAds={onToggleAds}
+          onResetPassword={onResetPassword}
           onClose={() => onSelectPlayer(null)}
         />
       ) : (
@@ -3659,7 +3677,7 @@ function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlay
   );
 }
 
-function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAdjustMoney, onTransferMoney, onToggleAds, onClose }) {
+function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAdjustMoney, onTransferMoney, onToggleAds, onResetPassword, onClose }) {
   const saveData = player.save_data || {};
   const hasAds = saveData.adsEnabled !== false;
   const customAmount = Number(moneyAmount);
@@ -3670,6 +3688,8 @@ function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAd
   const otherPlayers = (players || []).filter((p) => p.id !== player.player?.id);
   const transferAmountNum = Number(transferAmount);
   const hasValidTransferAmount = transferAmount !== '' && !Number.isNaN(transferAmountNum) && transferAmountNum > 0;
+
+  const [newPassword, setNewPassword] = useState('');
 
   return (
     <div>
@@ -3756,6 +3776,27 @@ function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAd
           <div style={{ display: 'flex', gap: 8 }}>
             <Btn variant={hasAds ? 'ghost' : 'gold'} onClick={() => onToggleAds(player.player.id, true)} disabled={hasAds}>활성화</Btn>
             <Btn variant={hasAds ? 'danger' : 'ghost'} onClick={() => onToggleAds(player.player.id, false)} disabled={!hasAds}>비활성화</Btn>
+          </div>
+        </Panel>
+
+        <Panel style={{ padding: 16 }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>🔑 비밀번호 변경</div>
+          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>기존 비밀번호 없이 강제로 새 비밀번호를 설정 (4자 이상)</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              placeholder="새 비밀번호"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+            />
+            <Btn
+              variant="gold"
+              disabled={newPassword.length < 4}
+              onClick={() => { onResetPassword(player.player.id, newPassword); setNewPassword(''); }}
+            >
+              변경
+            </Btn>
           </div>
         </Panel>
 
