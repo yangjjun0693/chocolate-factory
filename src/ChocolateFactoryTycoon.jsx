@@ -1531,7 +1531,6 @@ function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSl
   return (
     <div>
       <SectionTitle
-        eyebrow="Factory Floor"
         title="생산 라인"
         right={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -2342,11 +2341,11 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate, cfg })
       </Panel>
 
       <SectionTitle
-        eyebrow="Lucky Belt"
+        eyebrow="Phillipine Casino"
         title="카지노"
         right={
           <Btn variant={noAnim ? 'gold' : 'ghost'} small onClick={toggleNoAnim}>
-            {noAnim ? '🎬 애니메이션 켜기' : '⏩ 애니메이션 없애기'}
+            {noAnim ? '애니메이션 켜기' : '애니메이션 없애기'}
           </Btn>
         }
       />
