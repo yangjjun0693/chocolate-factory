@@ -3481,13 +3481,15 @@ function AdminPage({ onClose }) {
           </div>
         )}
 
-        {selectedPlayer && playerDetail && (
+        {activeTab !== 'player-controls' && selectedPlayer && playerDetail && (
           <PlayerDetailModal
             player={playerDetail}
             onClose={() => { setSelectedPlayer(null); setPlayerDetail(null); }}
             onAction={(action) => handlePlayerAction(selectedPlayer.id, action)}
             onAdjustMoney={adjustMoney}
             onToggleAds={toggleAds}
+            onAdjustPrestige={adjustPrestige}
+            onAdjustGachaCoins={adjustGachaCoins}
           />
         )}
       </div>
@@ -4103,7 +4105,7 @@ function DatabaseTab({ onExport, loading, supabaseAdminRpc }) {
 /* ---------------------------------------------------------------- */
 /*  플레이어 상세 모달                                                  */
 /* ---------------------------------------------------------------- */
-function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleAds }) {
+function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleAds, onAdjustPrestige, onAdjustGachaCoins }) {
   const saveData = player.save_data || {};
   const lines = saveData.lines || [];
   const staff = saveData.staff || [];
@@ -4118,6 +4120,12 @@ function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleA
           <div>
             <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 20, color: C.cream }}>{player.player?.username || 'Unknown'}</div>
             <div style={{ fontSize: 11, color: C.creamDim }}>ID: {player.player?.id || 'N/A'}</div>
+            <div style={{ fontSize: 11, color: C.creamDim, marginTop: 2 }}>
+              가입 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.signup_ip || '기록 없음'}</span>
+              {'  ·  '}
+              최근 접속 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.last_ip || '기록 없음'}</span>
+              {player.player?.last_seen_at ? `  (${new Date(player.player.last_seen_at).toLocaleString('ko-KR')})` : ''}
+            </div>
           </div>
           <Btn variant="ghost" onClick={onClose}><X size={18} /></Btn>
         </div>
@@ -4133,6 +4141,8 @@ function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleA
             ['🏦', '대출금', `${fmt(Number(saveData.debt) || 0)}$`],
             ['🗃', '창고 사용', `${fmt(Object.values(warehouse).reduce((a,b)=>a+b,0))}개`],
             ['🖼️', '배너 광고', hasAds ? '활성화' : '비활성화'],
+            ['♻️', '환생 횟수', `${Number(saveData.prestigeCount) || 0}회`],
+            ['🎟️', '뽑기 코인', `${Number(saveData.gachaCoins) || 0}개`],
           ].map(([icon, label, value]) => (
             <Panel key={label} style={{ padding: 12, textAlign: 'center' }}>
               <div style={{ fontSize: 18 }}>{icon}</div>
@@ -4155,6 +4165,29 @@ function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleA
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn variant={hasAds ? 'ghost' : 'gold'} onClick={() => onToggleAds(player.player.id, true)} disabled={hasAds}>활성화</Btn>
               <Btn variant={hasAds ? 'danger' : 'ghost'} onClick={() => onToggleAds(player.player.id, false)} disabled={!hasAds}>비활성화</Btn>
+            </div>
+          </Panel>
+
+          <Panel style={{ padding: 16 }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 14, marginBottom: 12 }}>♻️ 환생 관리</div>
+            <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>현재: <span style={{ color: C.epic, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.prestigeCount) || 0}회</span> (최대 10회)</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[-1, 1, 3, 5].map((amt) => (
+                <Btn key={amt} variant={amt < 0 ? 'danger' : 'gold'} small onClick={() => onAdjustPrestige(player.player.id, amt)}>{amt > 0 ? `+${amt}` : amt}회</Btn>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel style={{ padding: 16 }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 14, marginBottom: 12 }}>🎟️ 뽑기 코인 관리</div>
+            <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>보유: <span style={{ color: C.gold, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.gachaCoins) || 0}개</span></div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[1, 5, 10, 50].map((amt) => (
+                <Btn key={amt} variant="gold" small onClick={() => onAdjustGachaCoins(player.player.id, amt)}>+{amt}</Btn>
+              ))}
+              {[-1, -5, -10].map((amt) => (
+                <Btn key={amt} variant="danger" small onClick={() => onAdjustGachaCoins(player.player.id, amt)}>{amt}</Btn>
+              ))}
             </div>
           </Panel>
         </div>
