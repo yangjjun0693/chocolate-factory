@@ -3151,6 +3151,30 @@ function AdminPage({ onClose }) {
     }
   };
 
+  // 환생 횟수 직접 증감 (서버에서 0~10 범위로 clamp)
+  const adjustPrestige = async (playerId, amount) => {
+    try {
+      await supabaseAdminRpc('admin_adjust_prestige', { p_player_id: playerId, p_amount: amount });
+      loadPlayers();
+      if (selectedPlayer?.id === playerId) loadPlayerDetail(playerId);
+      pushToast(`환생 ${amount > 0 ? '+' : ''}${amount} 적용`, amount > 0 ? 'pistachio' : 'berry');
+    } catch (err) {
+      setError(err.message || '환생 조정 실패');
+    }
+  };
+
+  // 뽑기 코인 직접 증감 (서버에서 0 이상으로 clamp)
+  const adjustGachaCoins = async (playerId, amount) => {
+    try {
+      await supabaseAdminRpc('admin_adjust_gacha_coins', { p_player_id: playerId, p_amount: amount });
+      loadPlayers();
+      if (selectedPlayer?.id === playerId) loadPlayerDetail(playerId);
+      pushToast(`뽑기 코인 ${amount > 0 ? '+' : ''}${amount} 적용`, amount > 0 ? 'pistachio' : 'berry');
+    } catch (err) {
+      setError(err.message || '뽑기 코인 조정 실패');
+    }
+  };
+
   // 플레이어 간 송금: 보내는 쪽 잔액을 서버(admin_transfer_money RPC)에서 원자적으로
   // 검증하고 차감 + 지급을 한 트랜잭션으로 처리한다 (잔액 부족하면 통째로 실패).
   const transferMoney = async (fromPlayerId, toPlayerId, amount) => {
@@ -3424,6 +3448,8 @@ function AdminPage({ onClose }) {
               onTransferMoney={transferMoney}
               onToggleAds={toggleAds}
               onResetPassword={resetPlayerPassword}
+              onAdjustPrestige={adjustPrestige}
+              onAdjustGachaCoins={adjustGachaCoins}
               onSetJackpotRate={setJackpotRate}
               onSetGlobalConfig={setGlobalConfig}
             />
@@ -3494,25 +3520,27 @@ function PlayerManagementTab({ players, loading, error, selectedPlayer, playerDe
 
       {players.length > 0 && (
         <Panel style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 120px 100px 100px 100px 120px', gap: 12, padding: '12px 16px', fontSize: 11, fontWeight: 700, color: C.creamDim, background: C.bgPanelLight, borderBottom: `1px solid ${C.line}`, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 120px 100px 100px 100px 130px 120px', gap: 12, padding: '12px 16px', fontSize: 11, fontWeight: 700, color: C.creamDim, background: C.bgPanelLight, borderBottom: `1px solid ${C.line}`, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             <div>#</div>
             <div>사용자명</div>
             <div>자산</div>
             <div>누적매출</div>
             <div>누적생산</div>
             <div>최근접속</div>
+            <div>접속 IP</div>
             <div>액션</div>
           </div>
           {players.map((p, i) => {
             const isSelected = selectedPlayer?.id === p.id;
             return (
-              <div key={p.id} onClick={() => { onSelectPlayer(p); onLoadDetail(p.id); }} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 120px 100px 100px 100px 120px', gap: 12, padding: '10px 16px', alignItems: 'center', borderBottom: `1px solid ${C.line}`, background: isSelected ? C.bgPanelLighter : 'transparent', cursor: 'pointer', transition: 'background .1s' }}>
+              <div key={p.id} onClick={() => { onSelectPlayer(p); onLoadDetail(p.id); }} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 120px 100px 100px 100px 130px 120px', gap: 12, padding: '10px 16px', alignItems: 'center', borderBottom: `1px solid ${C.line}`, background: isSelected ? C.bgPanelLighter : 'transparent', cursor: 'pointer', transition: 'background .1s' }}>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: C.creamDim }}>{i + 1}</div>
                 <div style={{ fontWeight: 600, color: C.cream, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.username}</div>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", color: C.gold, fontWeight: 700 }}>{fmt(Number(p.money) || 0)}$</div>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: C.creamDim }}>{fmt(Number(p.total_revenue) || 0)}$</div>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: C.creamDim }}>{fmt(Number(p.total_produced) || 0)}개</div>
                 <div style={{ fontSize: 11, color: C.creamDim }}>{p.last_saved ? new Date(p.last_saved).toLocaleDateString('ko-KR') : '없음'}</div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: C.creamDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.last_ip || ''}>{p.last_ip || '—'}</div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <Btn variant="ghost" small onClick={(e) => { e.stopPropagation(); onPlayerAction(p.id, 'reset'); }}><RotateCcw size={12} /> 초기화</Btn>
                   <Btn variant="danger" small onClick={(e) => { e.stopPropagation(); onPlayerAction(p.id, 'ban'); }}><Ban size={12} /> 차단</Btn>
@@ -3529,7 +3557,7 @@ function PlayerManagementTab({ players, loading, error, selectedPlayer, playerDe
 /* ---------------------------------------------------------------- */
 /*  플레이어 제어 탭                                                   */
 /* ---------------------------------------------------------------- */
-function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlayer, onLoadDetail, onAdjustMoney, onTransferMoney, onToggleAds, onResetPassword, onSetJackpotRate, onSetGlobalConfig }) {
+function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlayer, onLoadDetail, onAdjustMoney, onTransferMoney, onToggleAds, onResetPassword, onAdjustPrestige, onAdjustGachaCoins, onSetJackpotRate, onSetGlobalConfig }) {
   const [moneyAmount, setMoneyAmount] = useState('');
   const [jackpotRate, setJackpotRateState] = useState(3);
   const [configKey, setConfigKey] = useState('productionSpeedMult');
@@ -3547,6 +3575,8 @@ function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlay
           onTransferMoney={onTransferMoney}
           onToggleAds={onToggleAds}
           onResetPassword={onResetPassword}
+          onAdjustPrestige={onAdjustPrestige}
+          onAdjustGachaCoins={onAdjustGachaCoins}
           onClose={() => onSelectPlayer(null)}
         />
       ) : (
@@ -3644,7 +3674,7 @@ function PlayerControlsTab({ players, selectedPlayer, playerDetail, onSelectPlay
   );
 }
 
-function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAdjustMoney, onTransferMoney, onToggleAds, onResetPassword, onClose }) {
+function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAdjustMoney, onTransferMoney, onToggleAds, onResetPassword, onAdjustPrestige, onAdjustGachaCoins, onClose }) {
   const saveData = player.save_data || {};
   const hasAds = saveData.adsEnabled !== false;
   const customAmount = Number(moneyAmount);
@@ -3768,6 +3798,34 @@ function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAd
         </Panel>
 
         <Panel style={{ padding: 16 }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>♻️ 환생 관리</div>
+          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>현재 환생 횟수: <span style={{ color: C.epic, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.prestigeCount) || 0}회</span> <span style={{ color: C.creamDim }}>(최대 10회)</span></div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[-1, 1, 3, 5].map((amt) => (
+              <Btn key={amt} variant={amt < 0 ? 'danger' : 'gold'} small onClick={() => onAdjustPrestige(player.player.id, amt)}>
+                {amt > 0 ? `+${amt}` : amt}회
+              </Btn>
+            ))}
+            <Btn variant="ghost" small onClick={() => onAdjustPrestige(player.player.id, 10 - (Number(saveData.prestigeCount) || 0))}>최대치로</Btn>
+            <Btn variant="ghost" small onClick={() => onAdjustPrestige(player.player.id, -(Number(saveData.prestigeCount) || 0))}>0으로 초기화</Btn>
+          </div>
+        </Panel>
+
+        <Panel style={{ padding: 16 }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>🎟️ 뽑기 코인 관리</div>
+          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>보유 뽑기 코인: <span style={{ color: C.gold, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.gachaCoins) || 0}개</span></div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[1, 5, 10, 50].map((amt) => (
+              <Btn key={amt} variant="gold" small onClick={() => onAdjustGachaCoins(player.player.id, amt)}>+{amt}</Btn>
+            ))}
+            {[-1, -5, -10].map((amt) => (
+              <Btn key={amt} variant="danger" small onClick={() => onAdjustGachaCoins(player.player.id, amt)}>{amt}</Btn>
+            ))}
+            <Btn variant="ghost" small onClick={() => onAdjustGachaCoins(player.player.id, -(Number(saveData.gachaCoins) || 0))}>0으로 초기화</Btn>
+          </div>
+        </Panel>
+
+        <Panel style={{ padding: 16 }}>
           <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>📊 빠른 정보</div>
           <div style={{ fontSize: 11, color: C.creamDim, lineHeight: 2 }}>
             <div>레벨: {saveData.lines?.reduce((max, l) => Math.max(max, l.level), 1) || 1}</div>
@@ -3775,6 +3833,15 @@ function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAd
             <div>업그레이드: {saveData.upgrades?.length || 0}개</div>
             <div>대출금: {fmt(Number(saveData.debt) || 0)}$</div>
             <div>창고: {fmt(Object.values(saveData.warehouse || {}).reduce((a,b)=>a+b,0))}개</div>
+          </div>
+        </Panel>
+
+        <Panel style={{ padding: 16 }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>🌐 접속 IP</div>
+          <div style={{ fontSize: 11, color: C.creamDim, lineHeight: 2 }}>
+            <div>가입 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.signup_ip || '기록 없음'}</span></div>
+            <div>최근 접속 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.last_ip || '기록 없음'}</span></div>
+            <div>최근 접속 시각: {player.player?.last_seen_at ? new Date(player.player.last_seen_at).toLocaleString('ko-KR') : '기록 없음'}</div>
           </div>
         </Panel>
       </div>
