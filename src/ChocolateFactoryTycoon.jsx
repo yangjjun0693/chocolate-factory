@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { createClient } from '@supabase/supabase-js';
 import {
   Factory, Warehouse, ShoppingCart, TrendingUp, Users, LayoutDashboard,
-  Lock, Check, Plus, ChevronRight, Sparkles, Coins, Package, Wrench,
+  Lock, Check, Plus, ChevronRight, ChevronDown, Sparkles, Coins, Package, Wrench,
   UserPlus, Gauge, Award, ArrowUpCircle, X, Activity, Database, Ban,
   RotateCcw, Download, Trash2, MessageCircle, ClipboardList, Megaphone, Send
 } from 'lucide-react';
@@ -53,6 +53,8 @@ const MOTION_CSS = `
   }
   .ftc-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.035); box-shadow: 0 10px 22px rgba(0,0,0,0.4); }
   .ftc-btn:active:not(:disabled) { transform: scale(0.93); transition-duration: .08s; }
+  .ftc-input::-webkit-outer-spin-button, .ftc-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .ftc-input::placeholder { color: rgba(201,180,154,0.55); }
   @keyframes ftcBlobFloat {
     0%,100% { transform: translate(0,0) scale(1); }
     33% { transform: translate(30px,-40px) scale(1.08); }
@@ -599,6 +601,163 @@ function SectionTitle({ eyebrow, title, right }) {
 }
 
 /* ---------------------------------------------------------------- */
+/*  커스텀 폼 컴포넌트 (Select / Toggle / TextField)                     */
+/*  네이티브 <select>/<input type=checkbox>는 브라우저 기본 크롬이 씌워져서 */
+/*  글래스모피즘 톤이랑 안 어울려서, 여기 세 개로 통일해서 씀                */
+/* ---------------------------------------------------------------- */
+import { createPortal } from 'react-dom';
+
+function Select({ value, onChange, options, placeholder = '선택', small, style }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const buttonRef = useRef(null);
+  const [dropdownStyle, setDropdownStyle] = useState({});
+
+  // 외부 클릭 시 닫기
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  // 드롭다운 위치 계산 (버튼 기준)
+  const updateDropdownPosition = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: 'fixed',
+        top: rect.bottom + 6,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: 240,
+        zIndex: 9999,
+      });
+    }
+  };
+
+  const handleOpen = () => {
+    updateDropdownPosition();
+    setOpen(true);
+  };
+
+  // 스크롤/리사이즈 시 위치 갱신
+  useEffect(() => {
+    if (!open) return;
+    const update = () => updateDropdownPosition();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open]);
+
+  const current = options.find((o) => String(o.value) === String(value));
+
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%', ...style }}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="ftc-btn"
+        onClick={handleOpen}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          background: 'rgba(74,51,29,0.55)', color: C.cream, border: `1px solid ${open ? C.gold : C.line}`,
+          borderRadius: 9, padding: small ? '7px 10px' : '9px 12px', fontSize: small ? 12.5 : 13.5,
+          fontFamily: "'Space Grotesk', sans-serif", cursor: 'pointer', backdropFilter: 'blur(8px)',
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {current ? `${current.icon ? `${current.icon} ` : ''}${current.label}` : placeholder}
+        </span>
+        <ChevronDown size={14} style={{ flexShrink: 0, color: C.creamDim, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s ease' }} />
+      </button>
+
+      {open && createPortal(
+        <div
+          className="ftc-glass ftc-fade-in"
+          style={{
+            ...dropdownStyle,
+            borderRadius: 10,
+            padding: 5,
+            overflowY: 'auto',
+            boxShadow: '0 14px 30px rgba(0,0,0,0.5)',
+          }}
+        >
+          {options.length === 0 && (
+            <div style={{ padding: '8px 9px', fontSize: 12, color: C.creamDim }}>옵션 없음</div>
+          )}
+          {options.map((o) => {
+            const isSelected = String(o.value) === String(value);
+            return (
+              <div
+                key={o.value}
+                onClick={() => { onChange(o.value); setOpen(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                  padding: '8px 9px', borderRadius: 7, cursor: 'pointer', fontSize: 12.5,
+                  color: isSelected ? C.gold : C.cream,
+                  background: isSelected ? 'rgba(234,193,58,0.12)' : 'transparent',
+                  transition: 'background .12s ease',
+                }}
+                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'rgba(242,228,201,0.06)'; }}
+                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {o.icon ? `${o.icon} ` : ''}{o.label}
+                </span>
+                {isSelected && <Check size={13} />}
+              </div>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function Toggle({ checked, onChange, label }) {
+  return (
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: C.creamDim, userSelect: 'none' }}>
+      <span
+        onClick={() => onChange(!checked)}
+        style={{ width: 34, height: 19, borderRadius: 999, position: 'relative', flexShrink: 0, background: checked ? C.pistachio : 'rgba(74,51,29,0.7)', border: `1px solid ${checked ? C.pistachio : C.line}`, transition: 'background .18s ease, border-color .18s ease' }}
+      >
+        <span style={{ position: 'absolute', top: 1, left: checked ? 16 : 1, width: 15, height: 15, borderRadius: '50%', background: C.cream, transition: 'left .18s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }} />
+      </span>
+      {label}
+    </label>
+  );
+}
+
+function TextField({ value, onChange, style, small, onFocus, onBlur, ...rest }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <input
+      {...rest}
+      value={value}
+      onChange={onChange}
+      className="ftc-input"
+      onFocus={(e) => { setFocused(true); onFocus?.(e); }}
+      onBlur={(e) => { setFocused(false); onBlur?.(e); }}
+      style={{
+        width: '100%', background: C.bgPanelLighter, color: C.cream,
+        border: `1px solid ${focused ? C.gold : C.line}`, borderRadius: 9,
+        padding: small ? '7px 9px' : '10px 12px', fontSize: small ? 12.5 : 14,
+        fontFamily: "'Space Grotesk', sans-serif", outline: 'none',
+        boxShadow: focused ? '0 0 0 3px rgba(234,193,58,0.15)' : 'none',
+        transition: 'border-color .15s ease, box-shadow .15s ease',
+        ...style,
+      }}
+    />
+  );
+}
+
+/* ---------------------------------------------------------------- */
 /*  메인 컴포넌트                                                     */
 /* ---------------------------------------------------------------- */
 export default function ChocolateFactoryTycoon() {
@@ -913,6 +1072,17 @@ export default function ChocolateFactoryTycoon() {
     });
   };
 
+  // 살 수 있는 만큼 한 번에 구매 (가격이 개당 고정이라 money / price로 바로 계산 가능)
+  const buyResourceMax = (key) => {
+    setG((prev) => {
+      const unitCost = (prev.prices[key] || 0) * cfg('ingredientCostMult', 1);
+      if (unitCost <= 0) return prev;
+      const amount = Math.floor(prev.money / unitCost);
+      if (amount <= 0) { pushToast('자금이 부족해요', 'berry'); return prev; }
+      return { ...prev, money: prev.money - unitCost * amount, resources: { ...prev.resources, [key]: (prev.resources[key] || 0) + amount } };
+    });
+  };
+
   const sellProduct = (recipeId, amount) => {
     setG((prev) => {
       const have = prev.warehouse[recipeId] || 0;
@@ -973,6 +1143,25 @@ export default function ChocolateFactoryTycoon() {
     });
   };
 
+  // 감당할 수 있는 만큼 레벨을 한 번에 쭉 올림 (레벨당 비용이 선형이라 반복 계산해도 가벼움)
+  const upgradeLineMax = (lineId) => {
+    setG((prev) => {
+      const line = prev.lines.find((l) => l.id === lineId);
+      if (!line) return prev;
+      let money = prev.money;
+      let level = line.level;
+      let steps = 0;
+      while (money >= LEVEL_COST(level)) {
+        money -= LEVEL_COST(level);
+        level += 1;
+        steps += 1;
+      }
+      if (steps === 0) { pushToast('자금이 부족해요', 'berry'); return prev; }
+      pushToast(`설비를 ${steps}단계 업그레이드했어요`, 'gold');
+      return { ...prev, money, lines: prev.lines.map((l) => (l.id === lineId ? { ...l, level } : l)) };
+    });
+  };
+
   const assignStaff = (lineId, staffId) => {
     setG((prev) => ({ ...prev, lines: prev.lines.map((l) => (l.id === lineId ? { ...l, staffId: staffId || null } : l)) }));
   };
@@ -1003,6 +1192,29 @@ export default function ChocolateFactoryTycoon() {
       };
     });
     pushToast('📈 직원을 훈련시켰어요 (레벨 업)', 'pistachio');
+  };
+
+  // 자금이 허락하는 한(또는 최고 레벨 도달할 때까지) 반복 레벨업
+  const levelUpStaffMax = (staffId) => {
+    setG((prev) => {
+      const member = prev.staff.find((s) => s.id === staffId);
+      if (!member) return prev;
+      const staffMaxLevel = cfg('staffMaxLevel', STAFF_MAX_LEVEL);
+      let money = prev.money;
+      let level = member.level;
+      let steps = 0;
+      while (level < staffMaxLevel && money >= STAFF_LEVEL_COST(level)) {
+        money -= STAFF_LEVEL_COST(level);
+        level += 1;
+        steps += 1;
+      }
+      if (steps === 0) {
+        pushToast(level >= staffMaxLevel ? '이미 최고 레벨이에요' : '자금이 부족해요', 'berry');
+        return prev;
+      }
+      pushToast(`📈 ${steps}레벨 훈련시켰어요`, 'pistachio');
+      return { ...prev, money, staff: prev.staff.map((s) => (s.id === staffId ? { ...s, level } : s)) };
+    });
   };
 
   const buyUpgrade = (up) => {
@@ -1319,11 +1531,11 @@ export default function ChocolateFactoryTycoon() {
       {/* 컨텐츠 — key={tab}로 탭이 바뀔 때마다 blur+slide로 다시 나타나게 한다 */}
       <div key={tab} className="ftc-tab-content" style={{ padding: '20px 22px 0' }}>
         {tab === 'factory' && (
-          <FactoryTab g={g} priceMult={displayPriceMult} effectiveWarehouseCap={effectiveWarehouseCap} buyLine={buyLine} expandLineSlot={expandLineSlot} setLineRecipe={setLineRecipe} upgradeLine={upgradeLine} assignStaff={assignStaff} setAutoSell={(v) => setG((p) => ({ ...p, autoSell: v }))} cfg={cfg} />
+          <FactoryTab g={g} priceMult={displayPriceMult} effectiveWarehouseCap={effectiveWarehouseCap} buyLine={buyLine} expandLineSlot={expandLineSlot} setLineRecipe={setLineRecipe} upgradeLine={upgradeLine} upgradeLineMax={upgradeLineMax} assignStaff={assignStaff} setAutoSell={(v) => setG((p) => ({ ...p, autoSell: v }))} cfg={cfg} />
         )}
-        {tab === 'shop' && <ShopTab g={g} priceMult={displayPriceMult} buyResource={buyResource} sellProduct={sellProduct} />}
+        {tab === 'shop' && <ShopTab g={g} priceMult={displayPriceMult} buyResource={buyResource} buyResourceMax={buyResourceMax} sellProduct={sellProduct} />}
         {tab === 'upgrade' && <UpgradeTab g={g} discount={discount} buyUpgrade={buyUpgrade} />}
-        {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} levelUpStaff={levelUpStaff} staffRevMult={staffRevMult} cfg={cfg} />}
+        {tab === 'staff' && <StaffTab g={g} hireStaff={hireStaff} levelUpStaff={levelUpStaff} levelUpStaffMax={levelUpStaffMax} staffRevMult={staffRevMult} cfg={cfg} />}
         {tab === 'gacha' && <GachaTab g={g} pullGacha={pullGacha} buyGachaCoin={buyGachaCoin} />}
         {tab === 'inventory' && <InventoryTab g={g} useBuffItem={useBuffItem} assembleRecipe={assembleRecipe} />}
         {tab === 'quest' && <QuestTab g={g} claimQuest={claimQuest} />}
@@ -1363,12 +1575,6 @@ function AuthScreen({ onAuth, onGuest }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const inputStyle = {
-    width: '100%', background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`,
-    borderRadius: 9, padding: '10px 12px', fontSize: 14, fontFamily: "'Space Grotesk', sans-serif",
-    marginBottom: 12, outline: 'none',
-  };
-
   const submit = async (e) => {
     e.preventDefault();
     if (busy) return;
@@ -1404,16 +1610,16 @@ function AuthScreen({ onAuth, onGuest }) {
         </div>
 
         <form onSubmit={submit}>
-          <input
-            style={inputStyle}
+          <TextField
+            style={{ marginBottom: 12 }}
             placeholder="이름 (2자 이상)"
             value={username}
             maxLength={20}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
           />
-          <input
-            style={{ ...inputStyle, marginBottom: 6 }}
+          <TextField
+            style={{ marginBottom: 6 }}
             placeholder="비밀번호 (4자 이상)"
             type="password"
             value={password}
@@ -1524,7 +1730,7 @@ function WelcomeScreen({ onStart }) {
 /* ---------------------------------------------------------------- */
 /*  공장 + 창고 탭                                                    */
 /* ---------------------------------------------------------------- */
-function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSlot, setLineRecipe, upgradeLine, assignStaff, setAutoSell, cfg }) {
+function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSlot, setLineRecipe, upgradeLine, upgradeLineMax, assignStaff, setAutoSell, cfg }) {
   const whTotal = Object.values(g.warehouse).reduce((a, b) => a + b, 0);
   const capForDisplay = effectiveWarehouseCap ?? g.warehouseCap;
   const maxLineCap = cfg('maxLines', MAX_LINE_CAP);
@@ -1534,10 +1740,7 @@ function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSl
         title="생산 라인"
         right={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.creamDim, cursor: 'pointer' }}>
-              <input type="checkbox" checked={g.autoSell} onChange={(e) => setAutoSell(e.target.checked)} />
-              생산 즉시 자동 판매
-            </label>
+            <Toggle checked={g.autoSell} onChange={setAutoSell} label="생산 즉시 자동 판매" />
             <Btn onClick={buyLine} disabled={g.lines.length >= g.maxLines}>
               <Plus size={14} /> 라인 추가 ({fmt(LINE_COST(g.lines.length))}$)
             </Btn>
@@ -1555,46 +1758,60 @@ function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSl
           const prodStaff = g.staff.filter((s) => s.role === 'production');
           return (
             <Panel key={line.id} className="ftc-fade-in" style={{ padding: 16, animationDelay: `${i * 0.06}s` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <span style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 700, color: C.cream }}>라인 · Lv.{line.level}</span>
                 <span style={{ fontSize: 22 }}>{recipe?.emoji}</span>
               </div>
-              <select
+
+              {/* 히어로: 지금 이 라인이 어떤 상태인지가 카드에서 제일 눈에 띄어야 한다 */}
+              {line.blocked ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(176,71,95,0.12)', border: `1px solid ${C.berry}55`, borderRadius: 8, padding: '9px 10px', fontSize: 12, color: C.berry, fontWeight: 600, marginBottom: 10 }}>
+                  ⚠ {line.blockedReason === 'warehouse' ? '창고가 가득 찼어요 — 판매하거나 창고를 늘리세요' : '원재료 부족 — 상점에서 구매하세요'}
+                </div>
+              ) : (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 26, fontWeight: 700, color: C.pistachio, lineHeight: 1 }}>{Math.floor(line.progress)}</span>
+                    <span style={{ fontSize: 12, color: C.creamDim }}>% 생산중</span>
+                  </div>
+                  <ProgressBar pct={line.progress} color={C.pistachio} height={9} />
+                </div>
+              )}
+
+              <div style={{ fontSize: 10.5, color: C.creamDim, marginBottom: 14 }}>
+                {Object.entries(recipe.ing).map(([k, v]) => `${getIngredientMeta(k).emoji}${v}`).join(' ')} → {fmt(recipe.price * priceMult)}$/개
+              </div>
+
+              <div style={{ fontSize: 10.5, letterSpacing: 1, color: C.creamDim, textTransform: 'uppercase', marginBottom: 8, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
+                라인 설정
+              </div>
+              <Select
                 value={line.recipeId}
-                onChange={(e) => setLineRecipe(line.id, e.target.value)}
-                style={{ width: '100%', background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '7px 8px', fontSize: 12.5, marginBottom: 10 }}
-              >
-                {g.unlockedRecipes.map((rid) => {
+                onChange={(v) => setLineRecipe(line.id, v)}
+                small
+                style={{ marginBottom: 8 }}
+                options={g.unlockedRecipes.map((rid) => {
                   const r = RECIPES.find((x) => x.id === rid);
-                  return <option key={rid} value={rid}>{r.emoji} {r.name}</option>;
+                  return { value: rid, label: r.name, icon: r.emoji };
                 })}
-              </select>
-
-              <div style={{ fontSize: 11, color: C.creamDim, marginBottom: 6 }}>
-                재료: {Object.entries(recipe.ing).map(([k, v]) => `${getIngredientMeta(k).emoji}${v}`).join(' ')} → 판매가 {fmt(recipe.price * priceMult)}$
-              </div>
-
-              <ProgressBar pct={line.progress} color={line.blocked ? C.berry : C.pistachio} />
-              <div style={{ fontSize: 11, color: line.blocked ? C.berry : C.creamDim, marginTop: 4, marginBottom: 12 }}>
-                {line.blocked
-                  ? (line.blockedReason === 'warehouse' ? '⚠ 창고가 가득 찼어요 — 판매하거나 창고를 늘리세요' : '⚠ 원재료 부족 — 상점에서 구매하세요')
-                  : `생산 진행률 ${Math.floor(line.progress)}%`}
-              </div>
-
-              <select
+              />
+              <Select
                 value={line.staffId || ''}
-                onChange={(e) => assignStaff(line.id, e.target.value ? Number(e.target.value) : null)}
-                style={{ width: '100%', background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '7px 8px', fontSize: 12.5, marginBottom: 10 }}
-              >
-                <option value="">직원 미배정</option>
-                {prodStaff.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} (Lv.{s.level} 생산직)</option>
-                ))}
-              </select>
+                onChange={(v) => assignStaff(line.id, v ? Number(v) : null)}
+                small
+                style={{ marginBottom: 12 }}
+                placeholder="직원 미배정"
+                options={[
+                  { value: '', label: '직원 미배정' },
+                  ...prodStaff.map((s) => ({ value: s.id, label: `${s.name} (Lv.${s.level} 생산직)` })),
+                ]}
+              />
 
-              <Btn small variant="ghost" onClick={() => upgradeLine(line.id)} style={{ width: '100%', justifyContent: 'center' }}>
-                <Wrench size={13} /> 설비 업그레이드 ({fmt(LEVEL_COST(line.level))}$)
-              </Btn>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Btn small variant="ghost" onClick={() => upgradeLine(line.id)} style={{ flex: 1, justifyContent: 'center' }}>
+                  <Wrench size={13} /> 업그레이드 ({fmt(LEVEL_COST(line.level))}$)
+                </Btn>
+              </div>
             </Panel>
           );
         })}
@@ -1624,7 +1841,7 @@ function FactoryTab({ g, priceMult, effectiveWarehouseCap, buyLine, expandLineSl
 /* ---------------------------------------------------------------- */
 /*  상점 & 거래 탭                                                    */
 /* ---------------------------------------------------------------- */
-function ShopTab({ g, priceMult, buyResource, sellProduct }) {
+function ShopTab({ g, priceMult, buyResource, buyResourceMax, sellProduct }) {
   const [customBuy, setCustomBuy] = useState({});
   const setAmt = (key, v) => setCustomBuy((prev) => ({ ...prev, [key]: v }));
   const confirmBuy = (key) => {
@@ -1651,16 +1868,20 @@ function ShopTab({ g, priceMult, buyResource, sellProduct }) {
                   +{amt}
                 </Btn>
               ))}
+              <Btn small variant="gold" onClick={() => buyResourceMax(key)} title="살 수 있는 만큼 한번에 구매">
+                최대
+              </Btn>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <input
+              <TextField
                 type="number"
                 min="1"
+                small
                 placeholder="직접 입력"
                 value={customBuy[key] ?? ''}
                 onChange={(e) => setAmt(key, e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && confirmBuy(key)}
-                style={{ flex: 1, minWidth: 0, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '6px 8px', fontSize: 12.5 }}
+                style={{ flex: 1, minWidth: 0 }}
               />
               <Btn
                 small
@@ -1876,7 +2097,7 @@ function UpgradeTab({ g, discount, buyUpgrade }) {
 /* ---------------------------------------------------------------- */
 /*  직원 관리 탭                                                      */
 /* ---------------------------------------------------------------- */
-function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult, cfg }) {
+function StaffTab({ g, hireStaff, levelUpStaff, levelUpStaffMax, staffRevMult, cfg }) {
   const assignedLineOf = (staffId) => g.lines.find((l) => l.staffId === staffId);
   const staffMaxLevel = cfg('staffMaxLevel', STAFF_MAX_LEVEL);
   const revenuePerLevel = cfg('staffRevenueBonusPerLevel', STAFF_REVENUE_PER_LEVEL * 100);
@@ -1969,15 +2190,32 @@ function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult, cfg }) {
                   ★ 특성 · {trait.label}: {trait.desc}
                 </div>
               )}
-              <Btn
-                small
-                variant={maxed ? 'ghost' : 'primary'}
-                disabled={maxed || g.money < cost}
-                onClick={() => levelUpStaff(s.id)}
-                style={{ width: '100%', justifyContent: 'center' }}
-              >
-                <Gauge size={13} /> {maxed ? '최고 레벨' : `레벨업 (${fmt(cost)}$)`}
-              </Btn>
+              
+              {/* ===== 여기서부터 수정된 버튼 영역 ===== */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                {/* +1 레벨업 버튼 */}
+                <Btn
+                  small
+                  variant={maxed ? 'ghost' : 'primary'}
+                  disabled={maxed || g.money < cost}
+                  onClick={() => levelUpStaff(s.id)}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  <Gauge size={13} /> ({fmt(cost)}$)
+                </Btn>
+
+                {/* 최대 레벨업 버튼 */}
+                <Btn
+                  small
+                  variant={maxed ? 'ghost' : 'gold'}
+                  disabled={maxed}
+                  onClick={() => levelUpStaffMax(s.id)}
+                  style={{ flex: '0 0 auto', justifyContent: 'center', padding: '6px 10px' }}
+                >
+                  최대
+                </Btn>
+              </div>
+              {/* ===== 수정 끝 ===== */}
             </Panel>
           );
         })}
@@ -1985,7 +2223,6 @@ function StaffTab({ g, hireStaff, levelUpStaff, staffRevMult, cfg }) {
     </div>
   );
 }
-
 /* ---------------------------------------------------------------- */
 /*  뽑기 탭                                                           */
 /* ---------------------------------------------------------------- */
@@ -2438,7 +2675,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate, cfg })
           ))}
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 18 }}>
-          <input
+          <TextField
             type="number"
             min="1"
             max={casinoMaxBet}
@@ -2447,7 +2684,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate, cfg })
             onChange={(e) => setCustomBet(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && confirmBet()}
             disabled={spinning}
-            style={{ width: 160, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 12.5 }}
+            style={{ width: 220 }}
           />
           <Btn variant="primary" disabled={spinning || !customBet || Number(customBet) <= 0 || Number(customBet) > g.money || Number(customBet) > casinoMaxBet} onClick={confirmBet}>
             직접 베팅
@@ -2886,13 +3123,13 @@ function ChatTab({ player, pushToast }) {
             <Megaphone size={13} /> 공지
           </Btn>
         )}
-        <input
+        <TextField
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
           maxLength={300}
           placeholder={announceMode ? '전체 공지 메시지를 입력하세요...' : '메시지를 입력하세요...'}
-          style={{ flex: 1, minWidth: 0, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${announceMode ? C.berry : C.line}`, borderRadius: 9, padding: '10px 12px', fontSize: 13 }}
+          style={{ flex: 1, minWidth: 0, borderColor: announceMode ? C.berry : undefined }}
         />
         <Btn variant={announceMode ? 'danger' : 'gold'} disabled={sending || !text.trim()} onClick={send}>
           <Send size={14} /> 전송
@@ -3690,6 +3927,14 @@ function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAd
 
   const [newPassword, setNewPassword] = useState('');
 
+  const [prestigeAmount, setPrestigeAmount] = useState('');
+  const prestigeNum = Number(prestigeAmount);
+  const hasValidPrestige = prestigeAmount !== '' && !Number.isNaN(prestigeNum) && prestigeNum !== 0;
+
+  const [gachaAmount, setGachaAmount] = useState('');
+  const gachaNum = Number(gachaAmount);
+  const hasValidGacha = gachaAmount !== '' && !Number.isNaN(gachaNum) && gachaNum !== 0;
+
   return (
     <div>
       <SectionTitle
@@ -3801,49 +4046,55 @@ function PlayerControlPanel({ player, players, moneyAmount, setMoneyAmount, onAd
 
         <Panel style={{ padding: 16 }}>
           <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>♻️ 환생 관리</div>
-          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>현재 환생 횟수: <span style={{ color: C.epic, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.prestigeCount) || 0}회</span> <span style={{ color: C.creamDim }}>(최대 10회)</span></div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {[-1, 1, 3, 5].map((amt) => (
-              <Btn key={amt} variant={amt < 0 ? 'danger' : 'gold'} small onClick={() => onAdjustPrestige(player.player.id, amt)}>
-                {amt > 0 ? `+${amt}` : amt}회
-              </Btn>
-            ))}
-            <Btn variant="ghost" small onClick={() => onAdjustPrestige(player.player.id, 10 - (Number(saveData.prestigeCount) || 0))}>최대치로</Btn>
-            <Btn variant="ghost" small onClick={() => onAdjustPrestige(player.player.id, -(Number(saveData.prestigeCount) || 0))}>0으로 초기화</Btn>
+          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>현재: <span style={{ color: C.epic, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.prestigeCount) || 0}회</span> / 최대 10회</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="number"
+              placeholder="증감량 (음수면 감소)"
+              value={prestigeAmount}
+              onChange={(e) => setPrestigeAmount(e.target.value)}
+              style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+            />
+            <Btn
+              variant={prestigeNum < 0 ? 'danger' : 'gold'}
+              disabled={!hasValidPrestige}
+              onClick={() => { onAdjustPrestige(player.player.id, prestigeNum); setPrestigeAmount(''); }}
+            >
+              적용
+            </Btn>
           </div>
         </Panel>
 
         <Panel style={{ padding: 16 }}>
           <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>🎟️ 뽑기 코인 관리</div>
-          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>보유 뽑기 코인: <span style={{ color: C.gold, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.gachaCoins) || 0}개</span></div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {[1, 5, 10, 50].map((amt) => (
-              <Btn key={amt} variant="gold" small onClick={() => onAdjustGachaCoins(player.player.id, amt)}>+{amt}</Btn>
-            ))}
-            {[-1, -5, -10].map((amt) => (
-              <Btn key={amt} variant="danger" small onClick={() => onAdjustGachaCoins(player.player.id, amt)}>{amt}</Btn>
-            ))}
-            <Btn variant="ghost" small onClick={() => onAdjustGachaCoins(player.player.id, -(Number(saveData.gachaCoins) || 0))}>0으로 초기화</Btn>
+          <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>보유: <span style={{ color: C.gold, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.gachaCoins) || 0}개</span></div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="number"
+              placeholder="증감량 (음수면 차감)"
+              value={gachaAmount}
+              onChange={(e) => setGachaAmount(e.target.value)}
+              style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+            />
+            <Btn
+              variant={gachaNum < 0 ? 'danger' : 'gold'}
+              disabled={!hasValidGacha}
+              onClick={() => { onAdjustGachaCoins(player.player.id, gachaNum); setGachaAmount(''); }}
+            >
+              적용
+            </Btn>
           </div>
         </Panel>
 
         <Panel style={{ padding: 16 }}>
-          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>📊 빠른 정보</div>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>📊 상태</div>
           <div style={{ fontSize: 11, color: C.creamDim, lineHeight: 2 }}>
-            <div>레벨: {saveData.lines?.reduce((max, l) => Math.max(max, l.level), 1) || 1}</div>
-            <div>직원: {saveData.staff?.length || 0}명</div>
-            <div>업그레이드: {saveData.upgrades?.length || 0}개</div>
-            <div>대출금: {fmt(Number(saveData.debt) || 0)}$</div>
-            <div>창고: {fmt(Object.values(saveData.warehouse || {}).reduce((a,b)=>a+b,0))}개</div>
-          </div>
-        </Panel>
-
-        <Panel style={{ padding: 16 }}>
-          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 15, marginBottom: 12 }}>🌐 접속 IP</div>
-          <div style={{ fontSize: 11, color: C.creamDim, lineHeight: 2 }}>
-            <div>가입 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.signup_ip || '기록 없음'}</span></div>
-            <div>최근 접속 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.last_ip || '기록 없음'}</span></div>
-            <div>최근 접속 시각: {player.player?.last_seen_at ? new Date(player.player.last_seen_at).toLocaleString('ko-KR') : '기록 없음'}</div>
+            <div>레벨: {saveData.lines?.reduce((max, l) => Math.max(max, l.level), 1) || 1} · 직원: {saveData.staff?.length || 0}명 · 업그레이드: {saveData.upgrades?.length || 0}개</div>
+            <div>대출금: {fmt(Number(saveData.debt) || 0)}$ · 창고: {fmt(Object.values(saveData.warehouse || {}).reduce((a,b)=>a+b,0))}개</div>
+            <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${C.line}` }}>
+              가입 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.signup_ip || '기록 없음'}</span>
+            </div>
+            <div>최근 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.last_ip || '기록 없음'}</span>{player.player?.last_seen_at ? ` (${new Date(player.player.last_seen_at).toLocaleString('ko-KR')})` : ''}</div>
           </div>
         </Panel>
       </div>
@@ -4120,11 +4371,9 @@ function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleA
           <div>
             <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 20, color: C.cream }}>{player.player?.username || 'Unknown'}</div>
             <div style={{ fontSize: 11, color: C.creamDim }}>ID: {player.player?.id || 'N/A'}</div>
-            <div style={{ fontSize: 11, color: C.creamDim, marginTop: 2 }}>
-              가입 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.signup_ip || '기록 없음'}</span>
-              {'  ·  '}
-              최근 접속 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.last_ip || '기록 없음'}</span>
-              {player.player?.last_seen_at ? `  (${new Date(player.player.last_seen_at).toLocaleString('ko-KR')})` : ''}
+            <div style={{ fontSize: 11, color: C.creamDim, marginTop: 2, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
+              <span>가입 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.signup_ip || '기록 없음'}</span></span>
+              <span>최근 접속 IP: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: C.cream }}>{player.player?.last_ip || '기록 없음'}</span>{player.player?.last_seen_at ? ` (${new Date(player.player.last_seen_at).toLocaleString('ko-KR')})` : ''}</span>
             </div>
           </div>
           <Btn variant="ghost" onClick={onClose}><X size={18} /></Btn>
@@ -4169,26 +4418,13 @@ function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleA
           </Panel>
 
           <Panel style={{ padding: 16 }}>
-            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 14, marginBottom: 12 }}>♻️ 환생 관리</div>
-            <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>현재: <span style={{ color: C.epic, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.prestigeCount) || 0}회</span> (최대 10회)</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {[-1, 1, 3, 5].map((amt) => (
-                <Btn key={amt} variant={amt < 0 ? 'danger' : 'gold'} small onClick={() => onAdjustPrestige(player.player.id, amt)}>{amt > 0 ? `+${amt}` : amt}회</Btn>
-              ))}
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 14, marginBottom: 12 }}>♻️ 환생 / 🎟️ 뽑기 코인</div>
+            <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>
+              환생 <span style={{ color: C.epic, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.prestigeCount) || 0}회</span>
+              {'  ·  '}
+              코인 <span style={{ color: C.gold, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.gachaCoins) || 0}개</span>
             </div>
-          </Panel>
-
-          <Panel style={{ padding: 16 }}>
-            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: C.cream, fontSize: 14, marginBottom: 12 }}>🎟️ 뽑기 코인 관리</div>
-            <div style={{ fontSize: 12, color: C.creamDim, marginBottom: 10 }}>보유: <span style={{ color: C.gold, fontFamily: "'JetBrains Mono', monospace" }}>{Number(saveData.gachaCoins) || 0}개</span></div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {[1, 5, 10, 50].map((amt) => (
-                <Btn key={amt} variant="gold" small onClick={() => onAdjustGachaCoins(player.player.id, amt)}>+{amt}</Btn>
-              ))}
-              {[-1, -5, -10].map((amt) => (
-                <Btn key={amt} variant="danger" small onClick={() => onAdjustGachaCoins(player.player.id, amt)}>{amt}</Btn>
-              ))}
-            </div>
+            <PrestigeGachaControls playerId={player.player?.id} onAdjustPrestige={onAdjustPrestige} onAdjustGachaCoins={onAdjustGachaCoins} />
           </Panel>
         </div>
 
@@ -4227,6 +4463,41 @@ function PlayerDetailModal({ player, onClose, onAction, onAdjustMoney, onToggleA
           <Btn variant="danger" onClick={() => onAction('reset')}><RotateCcw size={14} /> 데이터 초기화</Btn>
           <Btn variant="danger" onClick={() => onAction('ban')}><Ban size={14} /> 플레이어 차단</Btn>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PrestigeGachaControls({ playerId, onAdjustPrestige, onAdjustGachaCoins }) {
+  const [prestigeAmount, setPrestigeAmount] = useState('');
+  const prestigeNum = Number(prestigeAmount);
+  const hasValidPrestige = prestigeAmount !== '' && !Number.isNaN(prestigeNum) && prestigeNum !== 0;
+
+  const [gachaAmount, setGachaAmount] = useState('');
+  const gachaNum = Number(gachaAmount);
+  const hasValidGacha = gachaAmount !== '' && !Number.isNaN(gachaNum) && gachaNum !== 0;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          type="number"
+          placeholder="환생 증감량"
+          value={prestigeAmount}
+          onChange={(e) => setPrestigeAmount(e.target.value)}
+          style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+        />
+        <Btn variant={prestigeNum < 0 ? 'danger' : 'gold'} small disabled={!hasValidPrestige} onClick={() => { onAdjustPrestige(playerId, prestigeNum); setPrestigeAmount(''); }}>적용</Btn>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          type="number"
+          placeholder="뽑기 코인 증감량"
+          value={gachaAmount}
+          onChange={(e) => setGachaAmount(e.target.value)}
+          style={{ flex: 1, background: C.bgPanelLighter, color: C.cream, border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 13 }}
+        />
+        <Btn variant={gachaNum < 0 ? 'danger' : 'gold'} small disabled={!hasValidGacha} onClick={() => { onAdjustGachaCoins(playerId, gachaNum); setGachaAmount(''); }}>적용</Btn>
       </div>
     </div>
   );
