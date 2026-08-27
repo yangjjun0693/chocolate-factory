@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
+import * as THREE from 'three';
 import {
   Factory, Warehouse, ShoppingCart, TrendingUp, Users, LayoutDashboard,
   Lock, Check, Plus, ChevronRight, ChevronDown, Sparkles, Coins, Package, Wrench,
@@ -758,6 +759,244 @@ function TextField({ value, onChange, style, small, onFocus, onBlur, ...rest }) 
 }
 
 /* ---------------------------------------------------------------- */
+/*  Three.js 연출: 가챠 캡슐 리빌 / 잭팟 코인 샤워                          */
+/*  가벼운 원샷 이펙트라 react-three-fiber 없이 순수 three.js로 캔버스를     */
+/*  직접 마운트/해제한다 (씬·지오메트리·머티리얼은 언마운트 시 반드시 dispose)  */
+/* ---------------------------------------------------------------- */
+function GachaCapsuleReveal({ reveal, onClose }) {
+  const mountRef = useRef(null);
+  const [textVisible, setTextVisible] = useState(false);
+
+  useEffect(() => {
+    setTextVisible(false);
+    if (!reveal || !mountRef.current) return;
+    const textTimer = setTimeout(() => setTextVisible(true), 1300);
+
+    const mount = mountRef.current;
+    const size = 300;
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(size, size);
+    mount.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+    camera.position.set(0, 0.35, 4.4);
+    camera.lookAt(0, 0, 0);
+
+    const color = new THREE.Color(reveal.color);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const keyLight = new THREE.PointLight(color, 2.4, 14);
+    keyLight.position.set(2.2, 2, 3);
+    scene.add(keyLight);
+    const rimLight = new THREE.PointLight(0xffffff, 0.7, 14);
+    rimLight.position.set(-2, -1.2, 2.5);
+    scene.add(rimLight);
+
+    const R = 1;
+    const topGeo = new THREE.SphereGeometry(R, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const bottomGeo = new THREE.SphereGeometry(R, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+    const matTop = new THREE.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.35, emissive: color, emissiveIntensity: reveal.rarity === 'legendary' ? 0.6 : 0.15 });
+    const matBottom = new THREE.MeshStandardMaterial({ color: 0xf2e4c9, metalness: 0.2, roughness: 0.55 });
+    const topHalf = new THREE.Mesh(topGeo, matTop);
+    const bottomHalf = new THREE.Mesh(bottomGeo, matBottom);
+
+    const seamGeo = new THREE.TorusGeometry(R, 0.035, 12, 48);
+    const seamMat = new THREE.MeshStandardMaterial({ color: 0xeac13a, metalness: 0.7, roughness: 0.25 });
+    const seam = new THREE.Mesh(seamGeo, seamMat);
+    seam.rotation.x = Math.PI / 2;
+
+    const capsule = new THREE.Group();
+    capsule.add(topHalf, bottomHalf, seam);
+    scene.add(capsule);
+
+    // 캡슐이 갈라지는 시점에 등급색 파편이 사방으로 터진다 (전설일수록 더 많이)
+    const particleCount = reveal.rarity === 'legendary' ? 34 : reveal.rarity === 'epic' ? 24 : 16;
+    const particleGeo = new THREE.IcosahedronGeometry(0.045, 0);
+    const particleMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6, metalness: 0.4, roughness: 0.3 });
+    const particles = [];
+    for (let i = 0; i < particleCount; i++) {
+      const m = new THREE.Mesh(particleGeo, particleMat);
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 2 - 1);
+      const speed = 1.3 + Math.random() * 1.7;
+      m.userData.dir = new THREE.Vector3(Math.sin(phi) * Math.cos(theta), Math.sin(phi) * Math.sin(theta), Math.cos(phi)).multiplyScalar(speed);
+      m.scale.setScalar(0);
+      scene.add(m);
+      particles.push(m);
+    }
+
+    let raf;
+    let alive = true;
+    let burstStarted = false;
+    const start = performance.now();
+
+    const animate = (now) => {
+      if (!alive) return;
+      const t = now - start;
+
+      if (t < 900) {
+        // 1단계: 캡슐이 통째로 빠르게 회전하며 감속
+        const p = t / 900;
+        capsule.rotation.y = p * Math.PI * 6 * (1 - p * 0.3);
+        capsule.position.y = Math.sin(p * Math.PI) * 0.08;
+      } else if (t < 1300) {
+        // 2단계: 위/아래 절반이 갈라져 열림
+        const p = Math.min(1, (t - 900) / 400);
+        const ease = 1 - Math.pow(1 - p, 3);
+        topHalf.position.y = ease * 0.9;
+        topHalf.rotation.x = -ease * 0.6;
+        bottomHalf.position.y = -ease * 0.9;
+        bottomHalf.rotation.x = ease * 0.6;
+        seam.scale.setScalar(1 - ease * 0.4);
+        capsule.rotation.y += 0.01;
+        if (!burstStarted && p > 0.15) burstStarted = true;
+      } else {
+        // 3단계: 파편이 등급색으로 퍼지며 서서히 사라짐
+        capsule.rotation.y += 0.004;
+        const bt = Math.min(1, (t - 1300) / 1300);
+        particles.forEach((pt) => {
+          pt.position.set(pt.userData.dir.x * bt, pt.userData.dir.y * bt, pt.userData.dir.z * bt);
+          pt.scale.setScalar(Math.max(0, 1 - bt) * 1.1);
+          pt.rotation.x += 0.08;
+          pt.rotation.y += 0.05;
+        });
+      }
+
+      renderer.render(scene, camera);
+      if (t < 3000) {
+        raf = requestAnimationFrame(animate);
+      } else {
+        onClose();
+      }
+    };
+    raf = requestAnimationFrame(animate);
+
+    return () => {
+      alive = false;
+      clearTimeout(textTimer);
+      cancelAnimationFrame(raf);
+      particleGeo.dispose();
+      particleMat.dispose();
+      topGeo.dispose();
+      bottomGeo.dispose();
+      matTop.dispose();
+      matBottom.dispose();
+      seamGeo.dispose();
+      seamMat.dispose();
+      renderer.dispose();
+      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
+    };
+  }, [reveal, onClose]);
+
+  if (!reveal) return null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 500, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 14, cursor: 'pointer',
+        background: 'rgba(20,12,7,0.72)', backdropFilter: 'blur(6px)',
+      }}
+    >
+      <div ref={mountRef} style={{ width: 300, height: 300 }} />
+      <div style={{ textAlign: 'center', opacity: textVisible ? 1 : 0, transition: 'opacity .4s ease' }}>
+        <div style={{ fontSize: 12, letterSpacing: 2, color: reveal.color, fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>
+          {reveal.rarityLabel}
+        </div>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700, color: C.cream }}>
+          {reveal.emoji} {reveal.name}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: C.creamDim }}>탭하면 바로 닫혀요</div>
+    </div>
+  );
+}
+
+function JackpotBurst({ active }) {
+  const mountRef = useRef(null);
+
+  useEffect(() => {
+    if (!active || !mountRef.current) return;
+    const mount = mountRef.current;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(w, h);
+    mount.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
+    camera.position.set(0, 0, 9);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const light = new THREE.PointLight(0xeac13a, 2, 20);
+    light.position.set(0, 5, 6);
+    scene.add(light);
+
+    const coinGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.035, 24);
+    const coinMat = new THREE.MeshStandardMaterial({ color: 0xeac13a, metalness: 0.85, roughness: 0.25, emissive: 0xeac13a, emissiveIntensity: 0.15 });
+
+    const fovRad = (50 * Math.PI) / 180;
+    const halfW = Math.tan(fovRad / 2) * 9 * (w / h);
+
+    const COUNT = 46;
+    const coins = [];
+    for (let i = 0; i < COUNT; i++) {
+      const m = new THREE.Mesh(coinGeo, coinMat);
+      m.position.set((Math.random() * 2 - 1) * halfW * 0.85, 6 + Math.random() * 3, (Math.random() - 0.5) * 2);
+      m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      m.userData.vy = -(2.5 + Math.random() * 2.5);
+      m.userData.vx = (Math.random() - 0.5) * 1.2;
+      m.userData.spin = (Math.random() - 0.5) * 0.15;
+      m.userData.delay = Math.random() * 0.4;
+      scene.add(m);
+      coins.push(m);
+    }
+
+    let raf;
+    let alive = true;
+    const start = performance.now();
+    let lastT = start;
+
+    const animate = (now) => {
+      if (!alive) return;
+      const dt = Math.min(0.05, (now - lastT) / 1000);
+      lastT = now;
+      const t = (now - start) / 1000;
+
+      coins.forEach((m) => {
+        if (t < m.userData.delay) return;
+        m.position.y += m.userData.vy * dt;
+        m.position.x += m.userData.vx * dt;
+        m.rotation.x += m.userData.spin;
+        m.rotation.z += m.userData.spin * 0.7;
+        m.userData.vy -= 9.8 * dt * 0.5; // 낙하 가속 (연출용이라 실제 중력의 절반만 적용)
+      });
+
+      renderer.render(scene, camera);
+      if (t < 2.3) raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+
+    return () => {
+      alive = false;
+      cancelAnimationFrame(raf);
+      coinGeo.dispose();
+      coinMat.dispose();
+      renderer.dispose();
+      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
+    };
+  }, [active]);
+
+  if (!active) return null;
+  return <div ref={mountRef} style={{ position: 'fixed', inset: 0, zIndex: 400, pointerEvents: 'none' }} />;
+}
+
+/* ---------------------------------------------------------------- */
 /*  메인 컴포넌트                                                     */
 /* ---------------------------------------------------------------- */
 export default function ChocolateFactoryTycoon() {
@@ -768,6 +1007,10 @@ export default function ChocolateFactoryTycoon() {
   // ---- 관리자 패널 (Ctrl+Shift+A로 토글, 로그인 여부와 무관하게 열림) ----
   // 인증은 이 컴포넌트가 아니라 AdminPage 안에서 Supabase Auth(실제 서버 검증)로 처리한다.
   const [showAdmin, setShowAdmin] = useState(false);
+
+  // ---- 가챠 캡슐 리빌 연출 (Three.js) ----
+  const [gachaReveal, setGachaReveal] = useState(null);
+  const closeGachaReveal = useCallback(() => setGachaReveal(null), []);
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'A') {
@@ -1272,6 +1515,7 @@ export default function ChocolateFactoryTycoon() {
       }));
       const traitNote = STAFF_TRAITS[rarity] ? ` · 특성 [${STAFF_TRAITS[rarity].label}] 상시 발동!` : '';
       pushToast(`🎉 [${RARITY_INFO[rarity].label}] ${name}(${ROLES[role].label}) 직원을 얻었어요!${traitNote}`, rarity === 'legendary' ? 'gold' : 'pistachio');
+      setGachaReveal({ rarity, rarityLabel: RARITY_INFO[rarity].label, color: RARITY_INFO[rarity].color, emoji: '👤', name: `${name} · ${ROLES[role].label}` });
       if (rarity === 'legendary') {
         broadcastChatEvent('legendary', `🎉 ${player?.username || '누군가'}님이 전설 등급 직원 [${name}]을(를) 뽑았어요!`);
       }
@@ -1286,6 +1530,7 @@ export default function ChocolateFactoryTycoon() {
         quests: bumpQuest(prev.quests, 'gacha', 1),
       }));
       pushToast(`🧩 ${recipe.emoji} ${recipe.name} 조각을 얻었어요!`, 'gold');
+      setGachaReveal({ rarity: 'recipe', rarityLabel: '레시피 조각', color: RARITY_INFO.recipe.color, emoji: recipe.emoji, name: `${recipe.name} 조각` });
     } else if (kind === 'buff') {
       const rarity = pickGeneralRarity();
       const item = BUFF_BY_RARITY[rarity];
@@ -1297,6 +1542,7 @@ export default function ChocolateFactoryTycoon() {
         quests: bumpQuest(prev.quests, 'gacha', 1),
       }));
       pushToast(`✨ [${RARITY_INFO[rarity].label}] ${item.emoji} ${item.name}을(를) 얻었어요!`, rarity === 'legendary' ? 'gold' : 'pistachio');
+      setGachaReveal({ rarity, rarityLabel: RARITY_INFO[rarity].label, color: RARITY_INFO[rarity].color, emoji: item.emoji, name: item.name });
       if (rarity === 'legendary') {
         broadcastChatEvent('legendary', `🎉 ${player?.username || '누군가'}님이 전설 등급 아이템 [${item.name}]을(를) 뽑았어요!`);
       }
@@ -1560,6 +1806,8 @@ export default function ChocolateFactoryTycoon() {
           {g.toast.msg}
         </div>
       )}
+
+      <GachaCapsuleReveal reveal={gachaReveal} onClose={closeGachaReveal} />
       </div>
     </div>
   );
@@ -2531,7 +2779,7 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate, cfg })
             const cleanupId = setTimeout(() => {
               setCelebrating(false);
               setConfetti([]);
-            }, 1900);
+            }, 2500);
             timersRef.current.push({ id: cleanupId, interval: false });
           }
         }
@@ -2576,6 +2824,8 @@ function FinanceTab({ g, takeLoan, repayLoan, resolveCasino, jackpotRate, cfg })
           </Btn>
         </div>
       </Panel>
+
+      <JackpotBurst active={celebrating} />
 
       <SectionTitle
         eyebrow="Phillipine Casino"
