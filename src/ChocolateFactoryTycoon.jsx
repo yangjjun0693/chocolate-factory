@@ -612,12 +612,19 @@ function Select({ value, onChange, options, placeholder = '선택', small, style
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const buttonRef = useRef(null);
+  const dropdownRef = useRef(null);
   const [dropdownStyle, setDropdownStyle] = useState({});
 
   // 외부 클릭 시 닫기
+  // 드롭다운 옵션 목록은 createPortal로 document.body에 렌더링되기 때문에
+  // ref(래퍼) 안에 포함되지 않는다. dropdownRef도 함께 확인하지 않으면
+  // 옵션을 클릭할 때 mousedown이 먼저 발생해 드롭다운이 사라지고,
+  // 뒤이은 click(onChange)이 아예 발동하지 못하는 문제가 생긴다.
   useEffect(() => {
     const onDocClick = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && ref.current.contains(e.target)) return;
+      if (dropdownRef.current && dropdownRef.current.contains(e.target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
@@ -679,6 +686,7 @@ function Select({ value, onChange, options, placeholder = '선택', small, style
 
       {open && createPortal(
         <div
+          ref={dropdownRef}
           className="ftc-glass ftc-fade-in"
           style={{
             ...dropdownStyle,
